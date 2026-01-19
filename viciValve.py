@@ -5,7 +5,7 @@ import time
 class viciValve(object):
 
     '''if you have taken the head off the switching valve for any reason you must use the LRN command to re-center it 
-    if this has happened the valve will not switch back to its second position'''
+    witout this the valve will not switch back to its second position'''
     
 
     def connect(self, COM):
