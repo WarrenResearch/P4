@@ -16,8 +16,8 @@ class JascoPU2080:
             bytesize=serial.EIGHTBITS,
             parity=serial.PARITY_NONE,
             stopbits=serial.STOPBITS_TWO,
-            timeout=1,
-            rtscts=True, #hardware handshake 
+            timeout=3,
+            rtscts=False, #hardware handshake 
         )
 
         # pause after fopen - gives time for the connection to establish before sending commands
