@@ -26,7 +26,7 @@ class PumpControl(QtWidgets.QWidget):
         self.pumpModelLabel = QtWidgets.QLabel("Pump type: ")
         self.pumpModelLabel.setFixedSize(75, 20)
         self.pumpModelCombo = QtWidgets.QComboBox(self)
-        self.pumpModelCombo.addItems([ "", "Teledyne", "MilliGAT LF", "MilliGAT HF", "Chemyx Nexus 4000", "Chemyx Fusion 6000X", "Chemyx Fusion 4000X"])
+        self.pumpModelCombo.addItems([ "", "Teledyne", "MilliGAT LF", "MilliGAT HF", "Chemyx Nexus 4000", "Chemyx Fusion 6000X", "Chemyx Fusion 4000X", "Jasco PU2080"])
         self.pumpModelCombo.setStyleSheet("background-color: rgb(210, 210, 210);" "color: black;" "border-radius:5px")
         self.pumpModelCombo.setFixedSize(100, 20)
 
