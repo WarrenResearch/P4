@@ -6,7 +6,7 @@ import teledyne_pump
 import milliGAT_pump
 import chemyxFusion4kX
 import chemyxFusion6kX
-
+import jasco2080
 
 class PumpControl(QtWidgets.QWidget):
     def __init__(self, parent, pumpName:any):
@@ -162,7 +162,7 @@ class PumpControl(QtWidgets.QWidget):
         self.timer.start()
 
     def formatWidget(self, pump):
-        if pump == "Teledyne":
+        if pump == "Teledyne" or pump == "Jasco PU2080":
             self.resetWidget()
             self.pumpGroupBox.setMaximumHeight(300)
             self.pumpGroupBox.setMaximumWidth(200)
@@ -257,6 +257,11 @@ class PumpControl(QtWidgets.QWidget):
         if pumpModel == "Teledyne":
             self.pumpObj = teledyne_pump.teledynePump()
             self.pumpObj.connect(COMPort)
+
+        elif pumpModel == "Jasco PU2080":
+            self.pumpObj = jasco2080.JascoPU2080(COMPort)
+            ''' error with this section, COMport problems'''
+        
         elif pumpModel == "MilliGAT HF":
             if self.pumpAddressText.text() == '':
                 pumpConnectSuccess = 0
@@ -295,6 +300,8 @@ class PumpControl(QtWidgets.QWidget):
         try:
             if pumpModel == "Teledyne":
                 self.pumpObj.setFlowrate(flowRate)
+            elif pumpModel == "jasco PU2080":
+                self.pumpObj.set_flow_rate(float(flowRate))
             elif pumpModel == 'MilliGAT HF':
                 self.pumpObj.set_flow_rate(float(flowRate), pump_type='HF')
             elif pumpModel == "MilliGAT LF":
@@ -310,6 +317,8 @@ class PumpControl(QtWidgets.QWidget):
         COMPort = self.comPort.currentText()
         if pumpModel == "Teledyne":
             self.pumpObj.start()
+        elif pumpModel == "Jasco PU2080":
+            self.pumpObj.start()
         elif pumpModel == "MilliGAT HF":
             self.pumpObj.set_flow_rate(float(flowRate), pump_type='HF') # No 'start' command for MilliGAT, starts when a flow rate is sent, so send flow rate in current text field
         elif pumpModel == "MilliGAT LF":
@@ -323,6 +332,8 @@ class PumpControl(QtWidgets.QWidget):
         pumpModel = self.pumpModelCombo.currentText()
         COMPort = self.comPort.currentText()
         if pumpModel == "Teledyne":
+            self.pumpObj.stop()
+        elif pumpModel == "Jasco PU2080":
             self.pumpObj.stop()
         elif pumpModel == "MilliGAT HF":
             self.pumpObj.stop_pump()
