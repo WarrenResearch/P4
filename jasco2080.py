@@ -2,7 +2,26 @@ import serial
 import time
 
 
-'''Jasco PU-2080 Pump Control Class, import this into your python script to use the class.'''
+'''
+
+Jasco PU-2080 Pump Control Class, import this into your python script to use the class. 
+
+Example usage:
+
+
+from jasco_pump232 import JascoPU2080 - import the class from this file
+com_port = 4 - change this to the COM port your pump is connected to
+pump = JascoPU2080(com_port)
+try:
+    response = pump.read_max_pressure() # read the maximum pressure from the pump
+    print("Pump responded:", response) #print response from pump
+except RuntimeError:
+    print("No response from pump. Check serial settings, COM port, and pump address.")
+finally: # close the connection after finishing the code
+    pump.close()
+
+
+'''
 
 
 class JascoPU2080:
