@@ -10,6 +10,7 @@ dependencies:
   - matplotlib=3.9.2
   - bottleneck=1.4.2
   - numexpr=2.10.1
+  - doepy=0.0.1
   
   # GUI & Viz
   - pyqt=5.15.10
