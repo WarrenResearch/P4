@@ -13,7 +13,7 @@ class PlatformControl(QtWidgets.QWidget):
         self.main = main
         self._layout = QtWidgets.QGridLayout()
         self.setLayout(self._layout)
-        self.pumpsTuple = ("Teledyne", "MilliGAT LF", "MilliGAT HF", "Chemyx Nexus 4000", "Chemyx Fusion 6000X", "Chemyx Fusion 4000X")
+        self.pumpsTuple = ("Teledyne", "MilliGAT LF", "MilliGAT HF", "Chemyx Nexus 4000", "Chemyx Fusion 6000X", "Chemyx Fusion 4000X", "Jasco PU2080")
         self.valvesTuple = ("BioChem 8way selection", "BioChem 6way selection", "BioChem 6way switching", "Rheodyne 2pos switching", "Vici 2pos switching")
 
         self.pumpsBox = QtWidgets.QGroupBox("Pumps")
@@ -23,19 +23,19 @@ class PlatformControl(QtWidgets.QWidget):
         self._layout.addWidget(self.pumpsBox, 0, 0, QtCore.Qt.AlignTop)
 
         self.pump1 = pw.PumpControl(self, pumpName="Seed")
-        self.pump1.setHidden(True)
+        self.pump1.setHidden(False)
         self.pump1.pumpModelCombo.setCurrentText(self.pumpsTuple[4])
         self.pump1.formatWidget(pump=self.pumpsTuple[4])
         self.pumpsLayout.addWidget(self.pump1, 0, 0, QtCore.Qt.AlignLeft)
 
         self.pump2 = pw.PumpControl(self, pumpName="Monomer 1")
-        self.pump2.setHidden(True)
+        self.pump2.setHidden(False)
         self.pump2.pumpModelCombo.setCurrentText(self.pumpsTuple[0])
         self.pump2.formatWidget(pump=self.pumpsTuple[0])
         self.pumpsLayout.addWidget(self.pump2, 0, 1, QtCore.Qt.AlignLeft)
 
         self.pump3 = pw.PumpControl(self, pumpName="Monomer 2")
-        self.pump3.setHidden(True)
+        self.pump3.setHidden(False)
         self.pump3.pumpModelCombo.setCurrentText(self.pumpsTuple[0])
         self.pump3.formatWidget(pump=self.pumpsTuple[0])
         self.pumpsLayout.addWidget(self.pump3, 0, 2, QtCore.Qt.AlignLeft)
