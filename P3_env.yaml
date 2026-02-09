@@ -10,17 +10,18 @@ dependencies:
   - matplotlib=3.9.2
   - bottleneck=1.4.2
   - numexpr=2.10.1
-  - doepy=0.0.1
+
   
   # GUI & Viz
   - pyqt=5.15.10
   - pyqtgraph=0.13.7
   - pillow=11.1.0
   
-  # The packages causing the previous error
+  
   - apscheduler=3.11.0
   - tzlocal=5.3
   - pyserial=3.5
   - tornado=6.5.1
   - pytz=2025.2
   - python-dateutil=2.9.0
+  - doepy=0.0.1
