@@ -254,13 +254,14 @@ class PumpControl(QtWidgets.QWidget):
         address = self.pumpAddressText.text()
         pumpModel = self.pumpModelCombo.currentText()
         COMPort = self.comPort.currentText()
+        COM_number = int(COMPort.replace("COM", "")) # removes 'com' from COMPort. e.g. COMPort = 'COM3', COM_number = 3
+
         if pumpModel == "Teledyne":
             self.pumpObj = teledyne_pump.teledynePump()
             self.pumpObj.connect(COMPort)
 
         elif pumpModel == "Jasco PU2080":
-            self.pumpObj = jasco2080.JascoPU2080(COMPort)
-            ''' error with this section, COMport problems'''
+            self.pumpObj = jasco2080.JascoPU2080(COM_number)
         
         elif pumpModel == "MilliGAT HF":
             if self.pumpAddressText.text() == '':
