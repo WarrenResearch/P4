@@ -133,6 +133,11 @@ class GPC_runner(QtWidgets.QWidget):
         self.live_RI_signal.enableAutoRange(axis='x', enable=True)
         self.live_RI_signal.enableAutoRange(axis='y', enable=True)
         self.curve = self.live_RI_signal.plot()
+        # Live UV graph
+        self.live_UV_signal = pg.PlotWidget(title="Live UV signal")
+        self.live_UV_signal.enableAutoRange(axis='x', enable=True)
+        self.live_UV_signal.enableAutoRange(axis='y', enable=True)
+        self.uv_curve = self.live_UV_signal.plot()
         # Chromatograms graph
         self.gpc_trace = pg.PlotWidget(title="Chromatograms")
         self.gpc_trace.setXRange(0, 220)
@@ -141,6 +146,7 @@ class GPC_runner(QtWidgets.QWidget):
         self.MW_slice_plot.setXRange(120, 220)
         # Bring right layout together
         right_layout.addWidget(self.live_RI_signal)
+        right_layout.addWidget(self.live_UV_signal)
         right_layout.addWidget(self.gpc_trace)
         right_layout.addWidget(self.MW_slice_plot)
         # Add the right layout to the main layout
@@ -216,18 +222,25 @@ class GPC_runner(QtWidgets.QWidget):
         self.PicoGPC.rollingdataReady.disconnect()
     
     def update_rolling_plot(self, data):
-        
-        x, y = data
+        if len(data) == 3:
+            x, ri, uv = data
+        else:
+            x, ri = data
+            uv = None
         # set X range to show last 800 seconds of data, with slicing
         max_points = 800 * 5 # 5 points per second
         if len(x) > max_points:
             x = x[-max_points:]
-            y = y[-max_points:]
+            ri = ri[-max_points:]
+            if uv is not None:
+                uv = uv[-max_points:]
         
         # self.live_RI_signal.clear()
         # self.live_RI_signal.plot(x, y, pen='g')
         # self.curve = self.live_RI_signal.plot()
-        self.curve.setData(x,y)
+        self.curve.setData(x, ri)
+        if uv is not None:
+            self.uv_curve.setData(x, uv)
 
     def inject_sample_callback(self):
         if self.TC08connected == False:

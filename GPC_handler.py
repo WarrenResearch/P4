@@ -151,8 +151,14 @@ class GPC_handler(QObject):
         with open(r'C:\Users\Pcubed\miniconda3\envs\P3\Calibration.pkl', 'rb') as f:
             poly = pickle.load(f)
 
-        #Convert GPC results to two separate arrays
-        elution_time, RI_signal = GPCresults.to_numpy().T
+        #Convert GPC results to arrays
+        if "RI" in GPCresults.columns:
+            elution_time = GPCresults["Time"].to_numpy()
+            RI_signal = GPCresults["RI"].to_numpy()
+            uv_signal = GPCresults["UV"].to_numpy() if "UV" in GPCresults.columns else None
+        else:
+            elution_time, RI_signal = GPCresults.to_numpy().T
+            uv_signal = None
         #Add start time manipulation (see MATLAB)
         #Points on baseline (ADJUST after calibration)
 
@@ -236,7 +242,10 @@ class GPC_handler(QObject):
             Results["MP"][i] = MP
             
         Results["chrom"] = pd.DataFrame(chrom)
-        Results["rawchrom"] = pd.DataFrame(GPCresults, columns=["Time", "Signal"])
+        if uv_signal is not None:
+            Results["rawchrom"] = pd.DataFrame(GPCresults, columns=["Time", "RI", "UV"])
+        else:
+            Results["rawchrom"] = pd.DataFrame(GPCresults, columns=["Time", "Signal"])
         Results["polpeak"] = polpeak
         Results["Averages"] = pd.DataFrame([[np.mean(Results["Mn"]), np.mean(Results["Mw"]), np.mean(Results["PD"]), np.mean(Results["MP"])]], columns=["Mn", "Mw", "PD", "MP"])
 
@@ -260,7 +269,11 @@ class GPC_handler(QObject):
 
 
         #Convert GPC results to two separate arrays
-        elution_time, RI_signal = calib_data.to_numpy().T
+        if "RI" in calib_data.columns:
+            elution_time = calib_data["Time"].to_numpy()
+            RI_signal = calib_data["RI"].to_numpy()
+        else:
+            elution_time, RI_signal = calib_data.to_numpy().T
         elution_time = elution_time[0:chromlength]
         RI_signal = RI_signal[0:chromlength]
         #Add start time manipulation (see MATLAB)

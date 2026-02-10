@@ -20,7 +20,7 @@ class PicoGPC(QObject):
         self.tc08usb = TC08USB()
         self.tc08usb.open_unit()
         self.tc08usb.set_mains(50)
-        self.channels = [1]
+        self.channels = [1, 2]
         self.numChannels = len(self.channels)
         for i in self.channels:
             self.tc08usb.set_channel(i, USBTC08_TC_TYPE.X)
@@ -43,6 +43,7 @@ class PicoGPC(QObject):
         self.RI_SignalData = np.array([])
         self.timeAxis = np.array([])
         self.channel1 = np.array([]) #initialise data array for voltage
+        self.channel2 = np.array([]) #same for second channel (e.g. UV)
         self.timeAxis = np.array([])
         self.startMeasurementTime = datetime.datetime.now()
 
@@ -50,14 +51,15 @@ class PicoGPC(QObject):
             self.tc08usb.get_single()
             self.experimentTime = (datetime.datetime.now() - self.startMeasurementTime).total_seconds()
             self.timeAxis = np.append(self.timeAxis, self.experimentTime)
-            newData = np.array([self.tc08usb[1]]) # gathers new RI_Signal values from TC-08
+            newData = np.array([self.tc08usb[1], self.tc08usb[2]]) # gathers new RI/UV values from TC-08
             self.channel1 = np.append(self.channel1, newData[0]) # appends new data for each channel to the old array
+            self.channel2 = np.append(self.channel2, newData[1])
             # self.channel1Value.setText(f"{newData[0]:.6f}")
             # self.RI_SignalXRange = np.size(self.channel1)*1.2
             # self.RI_SignalYRange = max(self.channel1)*1.2
             # self.dataFeed.setXRange(0, self.RI_SignalXRange + 100, padding = 0)
             # self.dataFeed.setYRange(0, self.RI_SignalYRange + 20, padding = 0)
-            self.rollingdataReady.emit((self.timeAxis, self.channel1))
+            self.rollingdataReady.emit((self.timeAxis, self.channel1, self.channel2))
             
             time.sleep(0.2)
             
@@ -69,8 +71,8 @@ class PicoGPC(QObject):
         print(self.timeAxis)
         print(self.channel1)
 
-        GPCdata = pd.DataFrame(data=[self.timeAxis, self.channel1]).T
-        GPCdata.columns=["Time", "Signal"]
+        GPCdata = pd.DataFrame(data=[self.timeAxis, self.channel1, self.channel2]).T
+        GPCdata.columns=["Time", "RI", "UV"]
         self.dataReady.emit(GPCdata)
         self.stopMeasure()
         self.timer.cancel()

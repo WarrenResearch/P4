@@ -280,18 +280,20 @@ class GPC_calibration(QtWidgets.QWidget):
         self.PicoGPC.rollingdataReady.disconnect()
     
     def update_rolling_plot(self, data):
-        
-        x, y = data
+        if len(data) == 3:
+            x, ri, _uv = data
+        else:
+            x, ri = data
         # set X range to show last 800 seconds of data, with slicing
         max_points = 800 * 5 # 5 points per second
         if len(x) > max_points:
             x = x[-max_points:]
-            y = y[-max_points:]
+            ri = ri[-max_points:]
         
         # self.live_RI_signal.clear()
         # self.live_RI_signal.plot(x, y, pen='g')
         # self.curve = self.live_RI_signal.plot()
-        self.curve.setData(x,y)
+        self.curve.setData(x, ri)
 
     def add_calibrant_callback(self):
         if self.TC08connected == False:
