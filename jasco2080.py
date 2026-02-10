@@ -11,7 +11,7 @@ Example usage:
 
 from jasco_pump232 import JascoPU2080 - import the class from this file
 com_port = 4 - change this to the COM port your pump is connected to
-pump = JascoPU2080(com_port)
+pump = JascoPU2080(com_port) - designed to automatically connect to the COM Port, without having to have a self.connect() function
 try:
     response = pump.read_max_pressure() # read the maximum pressure from the pump
     print("Pump responded:", response) #print response from pump
@@ -24,7 +24,8 @@ finally: # close the connection after finishing the code
 '''
 
 
-class JascoPU2080:
+class JascoPU2080():
+    
     def __init__(self, com_port: int): #handles the physical connection logic
         if not (1 <= com_port <= 255):
             raise ValueError("COM port must be 1–255")
@@ -40,7 +41,7 @@ class JascoPU2080:
         )
 
         # pause after fopen - gives time for the connection to establish before sending commands
-        time.sleep(0.4) # potentially not necessary if a ping is used to check if the port is open - worthwhile looking into
+        time.sleep(0.4) # potentially not necessary if a ping is used to check if the port is open - worthwhile looking into 
 
     # ---------- low-level communication ----------
     def _comm(self, mode: str, command: str): # handles the raw talking/listening to the pump
