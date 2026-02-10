@@ -91,7 +91,7 @@ class GPC_handler(QObject):
 
     def GPC_inject(self):
         if self.injnum == 3:
-            meas_time = 700 
+            meas_time = 700 ### this will need to be changed from 700, but this hasn't been tested with longer measurement times yet, so start with this and adjust as needed
         else:
             meas_time = 900
 
