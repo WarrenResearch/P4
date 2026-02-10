@@ -155,7 +155,7 @@ class GPC_handler(QObject):
         if "RI" in GPCresults.columns:
             elution_time = GPCresults["Time"].to_numpy()
             RI_signal = GPCresults["RI"].to_numpy()
-            uv_signal = GPCresults["UV"].to_numpy() if "UV" in GPCresults.columns else None
+            uv_signal = GPCresults["UV"].to_numpy() if "UV" in GPCresults.columns else None # Check if UV data exists, and if so, convert to array, otherwise set to None
         else:
             elution_time, RI_signal = GPCresults.to_numpy().T
             uv_signal = None
