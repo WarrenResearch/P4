@@ -75,7 +75,7 @@ class GPC_handler(QObject):
     # Calibrant Injection; start monitoring RI signal
     def GPC_calibrant_inject(self):
         # set measurement time in seconds
-        meas_time = 330
+        meas_time = 900 # Adjust this to match the expected elution time of the calibrant, to ensure the whole chromatogram is captured
         # Print start and end times, and set them in GUI on appropriate QLabels
         print("Injection number", str(self.iter+1), "time=", datetime.now().strftime("%H:%M:%S"))
         self.main.GPC_calibration.start_time.setText(datetime.now().strftime("%H:%M:%S"))
@@ -91,9 +91,10 @@ class GPC_handler(QObject):
 
     def GPC_inject(self):
         if self.injnum == 3:
-            meas_time = 700
+            meas_time = 700 
         else:
-            meas_time = 340
+            meas_time = 900
+
         if self.iter == 0:
             self.main.GPC_runner.start_time.setText(datetime.now().strftime("%H:%M:%S"))
             self.main.GPC_runner.end_time.setText((datetime.now() + timedelta(seconds=meas_time)).strftime("%H:%M:%S"))
