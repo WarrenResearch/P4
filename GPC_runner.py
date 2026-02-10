@@ -139,7 +139,7 @@ class GPC_runner(QtWidgets.QWidget):
         # Calibration graph
         self.MW_slice_plot = pg.PlotWidget(title="MW slice")
         self.MW_slice_plot.setXRange(120, 220)
-        # Bring right layour together
+        # Bring right layout together
         right_layout.addWidget(self.live_RI_signal)
         right_layout.addWidget(self.gpc_trace)
         right_layout.addWidget(self.MW_slice_plot)
