@@ -302,7 +302,7 @@ class PumpControl(QtWidgets.QWidget):
             if pumpModel == "Teledyne":
                 self.pumpObj.setFlowrate(flowRate)
             elif pumpModel == "jasco PU2080":
-                self.pumpObj.set_flow_rate(float(flowRate))
+                self.pumpObj.set_flow(float(flowRate))
             elif pumpModel == 'MilliGAT HF':
                 self.pumpObj.set_flow_rate(float(flowRate), pump_type='HF')
             elif pumpModel == "MilliGAT LF":
@@ -319,6 +319,7 @@ class PumpControl(QtWidgets.QWidget):
         if pumpModel == "Teledyne":
             self.pumpObj.start()
         elif pumpModel == "Jasco PU2080":
+            self.pumpObj.set_flow(float(flowRate))
             self.pumpObj.start()
         elif pumpModel == "MilliGAT HF":
             self.pumpObj.set_flow_rate(float(flowRate), pump_type='HF') # No 'start' command for MilliGAT, starts when a flow rate is sent, so send flow rate in current text field
