@@ -21,6 +21,7 @@ import platformControl
 import experimentMethod
 import GPC_calibration
 import GPC_runner
+import platform_monitor
 
 class mainWindow(QtWidgets.QMainWindow):
     def __init__(self):
@@ -58,11 +59,19 @@ class mainWindow(QtWidgets.QMainWindow):
         self.GPC_runner = GPC_runner.GPC_runner(self, main=self)
         tab_4.addWidget(self.GPC_runner)
 
+        self.tab_5 = QtWidgets.QTabWidget()
+        tab_5 = QtWidgets.QGridLayout(self.tab_5)
+        self.platform_monitor = platform_monitor.PlatformMonitor(self, main=self)
+        tab_5.addWidget(self.platform_monitor)
+
+
         ####### Add tabs and titles to the master tab widget #######
         self.tab_main.addTab(self.tab_1, "Method builder")
         self.tab_main.addTab(self.tab_2, "Platform control")
         self.tab_main.addTab(self.tab_3, "GPC calibration")
         self.tab_main.addTab(self.tab_4, "GPC analysis runner")
+        self.tab_main.addTab(self.tab_5, "Platform Monitor")
+
 
 
     def setupUi(self, MainWindow):
