@@ -37,9 +37,19 @@ class PlatformMonitor(QtWidgets.QWidget):
         self._max_points = 300 # used to limit number of points on plot for performance - adjust as needed (e.g. for 20s logging interval, 300 points = 100 minutes of data)
         self._temp_series_time = []
         self._temp_series_value = []
+        self._pressure_pump1_time = []
+        self._pressure_pump1_value = []
+        self._pressure_pump2_time = []
+        self._pressure_pump2_value = []
+        self._flow_pump1_time = []
+        self._flow_pump1_value = []
+        self._flow_pump2_time = []
+        self._flow_pump2_value = []
+        self._flow_cumulative_time = []
+        self._flow_cumulative_value = []
         self._log_dataframe = pd.DataFrame()  # store accumulated log data for export
         self._csv_initialized = False
-        self._build_temperature_plot()
+        self._build_graphs()
 
         self.logging_interval = 20 * 1000 #every 20 seconds in ms (starts when the script is run)
         self.temp_logger = QtCore.QTimer()
@@ -51,7 +61,8 @@ class PlatformMonitor(QtWidgets.QWidget):
 
 
 
-    def _build_temperature_plot(self):
+    def _build_graphs(self):
+        # Temperature plot
         self.temp_plot = pg.PlotWidget(title="Furnace Temperature")
         self.temp_plot.setLabel("left", "Temperature", units="C")
         self.temp_plot.setLabel("bottom", "Time", units="min")
@@ -59,10 +70,31 @@ class PlatformMonitor(QtWidgets.QWidget):
         self.temp_curve = self.temp_plot.plot([], [], pen=pg.mkPen(color="#e4572e", width=2))
         self.layout.addWidget(self.temp_plot, 0, 0)
 
+        # Pressure plot
+        self.pressure_plot = pg.PlotWidget(title="Pump Pressure")
+        self.pressure_plot.setLabel("left", "Pressure", units="bar")
+        self.pressure_plot.setLabel("bottom", "Time", units="min")
+        self.pressure_plot.showGrid(x=True, y=True, alpha=0.3)
+        self.pressure_curve_pump1 = self.pressure_plot.plot([], [], pen=pg.mkPen(color="#0072B2", width=2), name="Pump 1")
+        self.pressure_curve_pump2 = self.pressure_plot.plot([], [], pen=pg.mkPen(color="#E69F00", width=2), name="Pump 2")
+        self.pressure_plot.addLegend()
+        self.layout.addWidget(self.pressure_plot, 0, 1)
+
+        # Flowrate plot
+        self.flowrate_plot = pg.PlotWidget(title="Pump Flowrate")
+        self.flowrate_plot.setLabel("left", "Flow Rate", units="mL/min")
+        self.flowrate_plot.setLabel("bottom", "Time", units="min")
+        self.flowrate_plot.showGrid(x=True, y=True, alpha=0.3)
+        self.flow_curve_pump1 = self.flowrate_plot.plot([], [], pen=pg.mkPen(color="#0072B2", width=2), name="Pump 1")
+        self.flow_curve_pump2 = self.flowrate_plot.plot([], [], pen=pg.mkPen(color="#E69F00", width=2), name="Pump 2")
+        self.flow_curve_cumulative = self.flowrate_plot.plot([], [], pen=pg.mkPen(color="#009E73", width=2, style=QtCore.Qt.DashLine), name="Cumulative")
+        self.flowrate_plot.addLegend()
+        self.layout.addWidget(self.flowrate_plot, 1, 0)
+
         # Add export button
         self.export_button = QtWidgets.QPushButton("Export Data")
         self.export_button.clicked.connect(self.export_data)
-        self.layout.addWidget(self.export_button, 1, 0)
+        self.layout.addWidget(self.export_button, 1, 1)
 
     ##### Temperature relies on furnace thermocouple 
     def safe_read_temp(self): # temperature read with retries - otherwise may throw error and stop program
@@ -77,16 +109,48 @@ class PlatformMonitor(QtWidgets.QWidget):
 
 
 
-    def _update_plot(self, now, temp):
-        elapsed_time = self.elapsed_time
-        # Track a rolling window for plotting.
+    def _update_plot(self, now, temp, pressure_p1, pressure_p2, flow_p1, flow_p2):
+        elapsed_time = (now - self.start_time_int).total_seconds() / 60.0
+        
+        # Update temperature data
         self._temp_series_time.append(elapsed_time)
         self._temp_series_value.append(temp)
         if len(self._temp_series_time) > self._max_points:
             self._temp_series_time = self._temp_series_time[-self._max_points:]
             self._temp_series_value = self._temp_series_value[-self._max_points:]
-
         self.temp_curve.setData(self._temp_series_time, self._temp_series_value)
+        
+        # Update pressure data
+        self._pressure_pump1_time.append(elapsed_time)
+        self._pressure_pump1_value.append(pressure_p1)
+        self._pressure_pump2_time.append(elapsed_time)
+        self._pressure_pump2_value.append(pressure_p2)
+        if len(self._pressure_pump1_time) > self._max_points:
+            self._pressure_pump1_time = self._pressure_pump1_time[-self._max_points:]
+            self._pressure_pump1_value = self._pressure_pump1_value[-self._max_points:]
+            self._pressure_pump2_time = self._pressure_pump2_time[-self._max_points:]
+            self._pressure_pump2_value = self._pressure_pump2_value[-self._max_points:]
+        self.pressure_curve_pump1.setData(self._pressure_pump1_time, self._pressure_pump1_value)
+        self.pressure_curve_pump2.setData(self._pressure_pump2_time, self._pressure_pump2_value)
+        
+        # Update flowrate data
+        cumulative_flow = flow_p1 + flow_p2
+        self._flow_pump1_time.append(elapsed_time)
+        self._flow_pump1_value.append(flow_p1)
+        self._flow_pump2_time.append(elapsed_time)
+        self._flow_pump2_value.append(flow_p2)
+        self._flow_cumulative_time.append(elapsed_time)
+        self._flow_cumulative_value.append(cumulative_flow)
+        if len(self._flow_pump1_time) > self._max_points:
+            self._flow_pump1_time = self._flow_pump1_time[-self._max_points:]
+            self._flow_pump1_value = self._flow_pump1_value[-self._max_points:]
+            self._flow_pump2_time = self._flow_pump2_time[-self._max_points:]
+            self._flow_pump2_value = self._flow_pump2_value[-self._max_points:]
+            self._flow_cumulative_time = self._flow_cumulative_time[-self._max_points:]
+            self._flow_cumulative_value = self._flow_cumulative_value[-self._max_points:]
+        self.flow_curve_pump1.setData(self._flow_pump1_time, self._flow_pump1_value)
+        self.flow_curve_pump2.setData(self._flow_pump2_time, self._flow_pump2_value)
+        self.flow_curve_cumulative.setData(self._flow_cumulative_time, self._flow_cumulative_value)
 
     def export_data(self):
         """Export accumulated log data to CSV with file dialog"""
@@ -116,31 +180,35 @@ class PlatformMonitor(QtWidgets.QWidget):
         log_path = os.path.join(log_dir, f"Experimental_log {self.start_time_str}.csv") #log path with start time in filename
 
         temp = self.safe_read_temp()
-
         now = datetime.datetime.now()
-
-        elapsed_time = self.elapsed_time
-
-        self._update_plot(now, temp)
+        elapsed_time = (now - self.start_time_int).total_seconds() / 60.0
+        
+        # Read pump data
+        flow_pump1 = float(self.pump1.read_flow()) if hasattr(self.pump1, 'read_flow') else 0.0
+        flow_pump2 = float(self.pump2.read_flow()) if hasattr(self.pump2, 'read_flow') else 0.0
+        pressure_pump1 = float(self.pump1.read_pressure()) if hasattr(self.pump1, 'read_pressure') else 0.0
+        pressure_pump2 = float(self.pump2.read_pressure()) if hasattr(self.pump2, 'read_pressure') else 0.0
+        
+        self._update_plot(now, temp, pressure_pump1, pressure_pump2, flow_pump1, flow_pump2)
 
 
         pump1_correction_factor_x_value = 1  # adjust if pump 1 has different calibration
-
         pump2_correction_factor_x_value = 1   # adjust if pump 2 has different calibration
         
-
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cumulative_flow = flow_pump1 + flow_pump2
 
         df_entry = pd.DataFrame([{
             "Time": timestamp,
             "Elapsed Time": elapsed_time,
             "Temperature": temp,
             "Step": getattr(self,"_sequence_index",None),
-            "Flow_A": (float(self.pump1.read_flow())*pump1_correction_factor_x_value), # retrieves the text from the flowrate input box and applies correction factor
-            "Flow_B": (float(self.pump2.read_flow())*pump2_correction_factor_x_value), # retrieves the text from the flowrate input box and applies correction factor
+            "Flow_A": flow_pump1 * pump1_correction_factor_x_value,
+            "Flow_B": flow_pump2 * pump2_correction_factor_x_value,
+            "Cumulative Flow": cumulative_flow,
+            "Pressure_A": pressure_pump1,
+            "Pressure_B": pressure_pump2,
             "Event": event,
-            "Pump 1 Pressure": self.pump1.read_pressure(), # placeholder for pressure read from pump - implement as needed
-            "Pump 2 Pressure": self.pump2.read_pressure(), # placeholder for pressure read from pump - implement as needed
             "residence_time": None # placeholder for residence time calculation - implement as needed
         }])
 
