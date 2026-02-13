@@ -258,6 +258,7 @@ class PumpControl(QtWidgets.QWidget):
 
     def updatePorts(self):
         currentPort = self.comPort.currentText()
+        comport_num = self.comPort.currentText()
         portsListTemp = QSerialPortInfo.availablePorts()
         if portsListTemp != QSerialPortInfo.availablePorts():
             self.comPort.clear()
@@ -333,7 +334,7 @@ class PumpControl(QtWidgets.QWidget):
         if pumpModel == "Teledyne":
             self.pumpObj.start()
         elif pumpModel == "Jasco PU2080":
-            self.pumpObj.start()
+            self.pumpObj.start() # add pump flow rate - jasco drivers dont cannot just 'start'
         elif pumpModel == "MilliGAT HF":
             self.pumpObj.set_flow_rate(float(flowRate), pump_type='HF') # No 'start' command for MilliGAT, starts when a flow rate is sent, so send flow rate in current text field
         elif pumpModel == "MilliGAT LF":

@@ -16,7 +16,7 @@ from serial.tools import list_ports
 import minimalmodbus
 
 #-------------------Eurotherm settings-------------------
-FURNACE_ADDRESS = 'COM4'
+FURNACE_ADDRESS = 'COM6' # change to the COM port the furnace is connected to. Can be found using get_ports() function below.
 RESET_TEMPERATURE = 25       #temperature the furnace resets to
 #-------------------Eurotherm settings-------------------
 
