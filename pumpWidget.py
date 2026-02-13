@@ -270,12 +270,14 @@ class PumpControl(QtWidgets.QWidget):
         address = self.pumpAddressText.text()
         pumpModel = self.pumpModelCombo.currentText()
         COMPort = self.comPort.currentText()
+        COM_number = int(COMPort.replace("COM", "")) # removes 'com' from COMPort. e.g. COMPort = 'COM3', COM_number = 3
+
         if pumpModel == "Teledyne":
             self.pumpObj = teledyne_pump.teledynePump()
             self.pumpObj.connect(COMPort)
 
         elif pumpModel == "Jasco PU2080":
-            self.pumpObj = jasco2080.JascoPU2080(COMPort)
+            self.pumpObj = jasco2080.JascoPU2080(COM_number)
             ''' error with this section, COMport problems'''
         
         elif pumpModel == "MilliGAT HF":
@@ -334,7 +336,8 @@ class PumpControl(QtWidgets.QWidget):
         if pumpModel == "Teledyne":
             self.pumpObj.start()
         elif pumpModel == "Jasco PU2080":
-            self.pumpObj.start() # add pump flow rate - jasco drivers dont cannot just 'start'
+            self.pumpObj.set_flow(float(flowRate))
+            self.pumpObj.start()
         elif pumpModel == "MilliGAT HF":
             self.pumpObj.set_flow_rate(float(flowRate), pump_type='HF') # No 'start' command for MilliGAT, starts when a flow rate is sent, so send flow rate in current text field
         elif pumpModel == "MilliGAT LF":
