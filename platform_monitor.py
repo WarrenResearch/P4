@@ -37,7 +37,7 @@ class PlatformMonitor(QtWidgets.QWidget):
         self.pump1_correction_factor_x_value = 1  # adjust if pump 1 has different calibration
         self.pump2_correction_factor_x_value = 1   # adjust if pump 2 has different calibration
         
-        self.logging_interval = 20 * 1000 #every 20 seconds in ms (starts when the script is run)
+        self.logging_interval = 60 * 1000 #every 60 seconds in ms (starts when the script is run)
         self.temp_logger = QtCore.QTimer()
         self.temp_logger.timeout.connect(self.continuous_log_function)
         self.temp_logger.start(self.logging_interval)
@@ -61,12 +61,10 @@ class PlatformMonitor(QtWidgets.QWidget):
 
         
 
-        
-
-
+    
     def _build_graphs(self):
         # Temperature plot
-        self.temp_plot = pg.PlotWidget(title="Furnace Temperature")
+        self.temp_plot = pg.PlotWidget(title="Reactor Temperature")
         self.temp_plot.setLabel("left", "Temperature", units="C")
         self.temp_plot.setLabel("bottom", "Time", units="min")
         self.temp_plot.showGrid(x=True, y=True, alpha=0.3)

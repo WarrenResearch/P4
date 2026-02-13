@@ -1,3 +1,5 @@
+import json
+import os
 from PyQt5 import QtWidgets, QtCore
 import pumpWidget as pw
 import valveWidget as vw
@@ -19,128 +21,151 @@ class PlatformControl(QtWidgets.QWidget):
         self.pumpsBox = QtWidgets.QGroupBox("Pumps")
         self.pumpsBox.setMaximumHeight(400)
         self.pumpsBox.setMaximumWidth(2000)
-        self.pumpsLayout = QtWidgets.QGridLayout(self.pumpsBox)
+        self.pumpsBoxLayout = QtWidgets.QVBoxLayout(self.pumpsBox)
         self._layout.addWidget(self.pumpsBox, 0, 0, QtCore.Qt.AlignTop)
 
-        self.pump1 = pw.PumpControl(self, pumpName="Seed")
-        self.pump1.setHidden(False)
-        self.pump1.pumpModelCombo.setCurrentText(self.pumpsTuple[4])
-        self.pump1.formatWidget(pump=self.pumpsTuple[4])
-        self.pumpsLayout.addWidget(self.pump1, 0, 0, QtCore.Qt.AlignLeft)
+        self.pumpsHeaderLayout = QtWidgets.QHBoxLayout()
+        self.addPumpButton = QtWidgets.QPushButton("Add Pump")
+        self.savePlatformButton = QtWidgets.QPushButton("Save Platform")
+        self.loadPlatformButton = QtWidgets.QPushButton("Load Platform")
+        self.pumpsHeaderLayout.addWidget(self.addPumpButton)
+        self.pumpsHeaderLayout.addWidget(self.savePlatformButton)
+        self.pumpsHeaderLayout.addWidget(self.loadPlatformButton)
+        self.pumpsHeaderLayout.addStretch(1)
+        self.pumpsBoxLayout.addLayout(self.pumpsHeaderLayout)
 
-        self.pump2 = pw.PumpControl(self, pumpName="Monomer 1")
-        self.pump2.setHidden(False)
-        self.pump2.pumpModelCombo.setCurrentText(self.pumpsTuple[0])
-        self.pump2.formatWidget(pump=self.pumpsTuple[0])
-        self.pumpsLayout.addWidget(self.pump2, 0, 1, QtCore.Qt.AlignLeft)
+        self.pumpsLayout = QtWidgets.QGridLayout()
+        self.pumpsLayout.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        self.pumpsBoxLayout.addLayout(self.pumpsLayout)
 
-        self.pump3 = pw.PumpControl(self, pumpName="Monomer 2")
-        self.pump3.setHidden(False)
-        self.pump3.pumpModelCombo.setCurrentText(self.pumpsTuple[0])
-        self.pump3.formatWidget(pump=self.pumpsTuple[0])
-        self.pumpsLayout.addWidget(self.pump3, 0, 2, QtCore.Qt.AlignLeft)
-
-        self.pump4 = pw.PumpControl(self, pumpName="Aqueous 1")
-        self.pump4.setHidden(True)
-        self.pump4.pumpModelCombo.setCurrentText(self.pumpsTuple[2])
-        self.pump4.formatWidget(pump=self.pumpsTuple[2])
-        self.pumpsLayout.addWidget(self.pump4, 0, 3, QtCore.Qt.AlignLeft)
-
-        self.pump5 = pw.PumpControl(self, pumpName="Aqueous 2")
-        self.pump5.setHidden(True)
-        self.pump5.pumpModelCombo.setCurrentText(self.pumpsTuple[2])
-        self.pump5.formatWidget(pump=self.pumpsTuple[2])
-        self.pumpsLayout.addWidget(self.pump5, 0, 4, QtCore.Qt.AlignLeft)
-
-        self.pump6 = pw.PumpControl(self, pumpName="Solvent")
-        self.pump6.setHidden(True)
-        self.pump6.pumpModelCombo.setCurrentText(self.pumpsTuple[0])
-        self.pump6.formatWidget(pump=self.pumpsTuple[0])
-        self.pumpsLayout.addWidget(self.pump6, 0, 13, QtCore.Qt.AlignLeft)
-
-        self.pump7 = pw.PumpControl(self, pumpName="Org1")
-        self.pump7.setHidden(True)
-        self.pump7.pumpModelCombo.setCurrentText(self.pumpsTuple[2])
-        self.pump7.formatWidget(pump=self.pumpsTuple[2])
-        self.pumpsLayout.addWidget(self.pump7, 0, 6, QtCore.Qt.AlignLeft)
-
-        self.pump8 = pw.PumpControl(self, pumpName="Org2")
-        self.pump8.setHidden(True)
-        self.pump8.pumpModelCombo.setCurrentText(self.pumpsTuple[0])
-        self.pump8.formatWidget(pump=self.pumpsTuple[0])
-        self.pumpsLayout.addWidget(self.pump8, 0, 7, QtCore.Qt.AlignLeft)
-
-        self.pump9 = pw.PumpControl(self, pumpName="Water")
-        self.pump9.setHidden(True)
-        self.pump9.pumpModelCombo.setCurrentText(self.pumpsTuple[0])
-        self.pump9.formatWidget(pump=self.pumpsTuple[0])
-        self.pumpsLayout.addWidget(self.pump9, 0, 8, QtCore.Qt.AlignLeft)
-
-        self.pump10 = pw.PumpControl(self, pumpName="DLS")
-        self.pump10.setHidden(True)
-        self.pump10.pumpModelCombo.setCurrentText(self.pumpsTuple[0])
-        self.pump10.formatWidget(pump=self.pumpsTuple[0])
-        self.pumpsLayout.addWidget(self.pump10, 0, 9, QtCore.Qt.AlignLeft)
-
-        self.pump11 = pw.PumpControl(self, pumpName="Initiator")
-        self.pump11.setHidden(True)
-        self.pump11.pumpModelCombo.setCurrentText(self.pumpsTuple[1])
-        self.pump11.formatWidget(pump=self.pumpsTuple[1])
-        self.pumpsLayout.addWidget(self.pump11, 0, 10, QtCore.Qt.AlignLeft)
-
-        self.pump12 = pw.PumpControl(self, pumpName="Surfactant")
-        self.pump12.setHidden(True)
-        self.pump12.pumpModelCombo.setCurrentText(self.pumpsTuple[1])
-        self.pump12.formatWidget(pump=self.pumpsTuple[1])
-        self.pumpsLayout.addWidget(self.pump12, 0, 11, QtCore.Qt.AlignLeft)
-
-        self.pump13 = pw.PumpControl(self, pumpName="Macro-CTA")
-        self.pump13.setHidden(True)
-        self.pump13.pumpModelCombo.setCurrentText(self.pumpsTuple[1])
-        self.pump13.formatWidget(pump=self.pumpsTuple[1])
-        self.pumpsLayout.addWidget(self.pump13, 0, 12, QtCore.Qt.AlignLeft)
+        self.pump_widgets = []
+        self.pump_count = 0
+        self.pump_columns = 4
+        self.addPumpButton.clicked.connect(self.add_pump)
+        self.savePlatformButton.clicked.connect(self.save_platform)
+        self.loadPlatformButton.clicked.connect(self.load_platform)
 
 
 ######################################## Valves ########################################
         self.valvesBox = QtWidgets.QGroupBox("Valves")
         self.valvesBox.setMaximumHeight(400)
         self.valvesBox.setMaximumWidth(1400)
-        self.valvesLayout = QtWidgets.QGridLayout(self.valvesBox)
+        self.valvesBoxLayout = QtWidgets.QVBoxLayout(self.valvesBox)
         self._layout.addWidget(self.valvesBox, 1, 0, QtCore.Qt.AlignTop)
 
-        self.valve1 = vw.ValveControl(self, valveName="Solvent")
-        self.valve1.valveTypeCombo.setCurrentText(self.valvesTuple[0])
-        self.valve1.formatWidget(valve=self.valvesTuple[0])
-        self.valvesLayout.addWidget(self.valve1, 0, 0, QtCore.Qt.AlignLeft)
+        self.valvesHeaderLayout = QtWidgets.QHBoxLayout()
+        self.addValveButton = QtWidgets.QPushButton("Add Valve")
+        self.valvesHeaderLayout.addWidget(self.addValveButton)
+        self.valvesHeaderLayout.addStretch(1)
+        self.valvesBoxLayout.addLayout(self.valvesHeaderLayout)
 
-        self.valve2 = vw.ValveControl(self, valveName="Emulsion")
-        self.valve2.valveTypeCombo.setCurrentText(self.valvesTuple[1])
-        self.valve2.formatWidget(valve=self.valvesTuple[1])
-        self.valvesLayout.addWidget(self.valve2, 0, 1, QtCore.Qt.AlignLeft)
+        self.valvesLayout = QtWidgets.QGridLayout()
+        self.valvesLayout.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        self.valvesBoxLayout.addLayout(self.valvesLayout)
 
-        self.valve3 = vw.ValveControl(self, valveName="Outlet")
-        self.valve3.valveTypeCombo.setCurrentText(self.valvesTuple[0])
-        self.valve3.formatWidget(valve=self.valvesTuple[0])
-        self.valvesLayout.addWidget(self.valve3, 0, 2, QtCore.Qt.AlignLeft)
+        self.valve_widgets = []
+        self.valve_count = 0
+        self.valve_columns = 4
+        self.addValveButton.clicked.connect(self.add_valve)
 
-        self.valve4 = vw.ValveControl(self, valveName="DLS")
-        self.valve4.valveTypeCombo.setCurrentText(self.valvesTuple[0])
-        self.valve4.formatWidget(valve=self.valvesTuple[0])
-        self.valvesLayout.addWidget(self.valve4, 0, 3, QtCore.Qt.AlignLeft)
+    def add_pump(self):
+        self.pump_count += 1
+        pump_widget = pw.PumpControl(self, pumpName=f"Pump {self.pump_count}")
+        self.pump_widgets.append(pump_widget)
 
-        self.valve5 = vw.ValveControl(self, valveName="GPC")
-        self.valve5.valveTypeCombo.setCurrentText(self.valvesTuple[4])
-        self.valve5.formatWidget(valve=self.valvesTuple[4])
-        self.valvesLayout.addWidget(self.valve5, 0, 4, QtCore.Qt.AlignLeft)
+        row = (self.pump_count - 1) // self.pump_columns
+        column = (self.pump_count - 1) % self.pump_columns
+        self.pumpsLayout.addWidget(pump_widget, row, column, QtCore.Qt.AlignLeft)
+        setattr(self, f"pump{self.pump_count}", pump_widget)
+
+    def add_valve(self):
+        self.valve_count += 1
+        valve_widget = vw.ValveControl(self, valveName=f"Valve {self.valve_count}")
+        self.valve_widgets.append(valve_widget)
+
+        row = (self.valve_count - 1) // self.valve_columns
+        column = (self.valve_count - 1) % self.valve_columns
+        self.valvesLayout.addWidget(valve_widget, row, column, QtCore.Qt.AlignLeft)
+        setattr(self, f"valve{self.valve_count}", valve_widget)
 
     def resetWidgets(self):
-        self.pump1.setHidden(True)
-        self.pump2.setHidden(True)
-        self.pump3.setHidden(True)
-        self.pump4.setHidden(True)
-        self.pump5.setHidden(True)
-        self.pump6.setHidden(True)
-        self.pump7.setHidden(True)
-        self.pump8.setHidden(True)
-        self.pump9.setHidden(True)
-        self.pump10.setHidden(True)
+        for pump_widget in self.pump_widgets:
+            pump_widget.setParent(None)
+            pump_widget.deleteLater()
+        for valve_widget in self.valve_widgets:
+            valve_widget.setParent(None)
+            valve_widget.deleteLater()
+
+        self.pump_widgets = []
+        self.valve_widgets = []
+        self.pump_count = 0
+        self.valve_count = 0
+
+    def _platform_file_path(self):
+        return os.path.join(os.path.dirname(__file__), "platform_layout.json")
+
+    def _set_combo_text(self, combo, value):
+        if not value:
+            return
+        if combo.findText(value) == -1:
+            combo.addItem(value)
+        combo.setCurrentText(value)
+
+    def save_platform(self):
+        pumps = []
+        for pump_widget in self.pump_widgets:
+            pumps.append({
+                "name": pump_widget.nameEdit.text().strip(),
+                "model": pump_widget.pumpModelCombo.currentText(),
+                "com_port": pump_widget.comPort.currentText(),
+            })
+
+        valves = []
+        for valve_widget in self.valve_widgets:
+            valves.append({
+                "name": valve_widget.nameEdit.text().strip(),
+                "type": valve_widget.valveTypeCombo.currentText(),
+                "com_port": valve_widget.comPort.currentText(),
+            })
+
+        data = {
+            "pumps": pumps,
+            "valves": valves,
+        }
+
+        with open(self._platform_file_path(), "w", encoding="utf-8") as file_handle:
+            json.dump(data, file_handle, indent=2)
+
+    def load_platform(self):
+        path = self._platform_file_path()
+        if not os.path.exists(path):
+            msgbox = QtWidgets.QMessageBox(self)
+            msgbox.setWindowTitle("Load platform")
+            msgbox.setText("No saved platform layout found.")
+            msgbox.exec()
+            return
+
+        with open(path, "r", encoding="utf-8") as file_handle:
+            data = json.load(file_handle)
+
+        self.resetWidgets()
+
+        for pump_data in data.get("pumps", []):
+            self.add_pump()
+            pump_widget = self.pump_widgets[-1]
+            saved_name = pump_data.get("name") or pump_widget.nameEdit.text()
+            pump_widget._default_name = saved_name
+            pump_widget.nameEdit.setText(saved_name)
+            self._set_combo_text(pump_widget.pumpModelCombo, pump_data.get("model"))
+            pump_widget.formatWidget(pump_widget.pumpModelCombo.currentText())
+            self._set_combo_text(pump_widget.comPort, pump_data.get("com_port"))
+
+        for valve_data in data.get("valves", []):
+            self.add_valve()
+            valve_widget = self.valve_widgets[-1]
+            saved_name = valve_data.get("name") or valve_widget.nameEdit.text()
+            valve_widget._default_name = saved_name
+            valve_widget.nameEdit.setText(saved_name)
+            self._set_combo_text(valve_widget.valveTypeCombo, valve_data.get("type"))
+            valve_widget.formatWidget(valve_widget.valveTypeCombo.currentText())
+            self._set_combo_text(valve_widget.comPort, valve_data.get("com_port"))

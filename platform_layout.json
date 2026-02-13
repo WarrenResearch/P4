@@ -1,0 +1,21 @@
+{
+  "pumps": [
+    {
+      "name": "Pump 1",
+      "model": "Jasco PU2080",
+      "com_port": "COM5"
+    },
+    {
+      "name": "Pump 2",
+      "model": "Jasco PU2080",
+      "com_port": "COM5"
+    }
+  ],
+  "valves": [
+    {
+      "name": "Valve 1",
+      "type": "Vici 2pos switching",
+      "com_port": "COM5"
+    }
+  ]
+}
