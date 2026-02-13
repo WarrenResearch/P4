@@ -31,8 +31,16 @@ class PlatformMonitor(QtWidgets.QWidget):
         self.a = 10 # correction factor for temperature read (to match external thermometer) - adjust as needed
         self.start_time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") # string start time for log filename
         self.start_time_int = datetime.datetime.now() # datetime object for reaction time calculations
-        self.elapsed_time = (datetime.datetime.now() - self.start_time_int).total_seconds() / 60.0
 
+        self.pump1 = pw.PumpControl(self, pumpName="Pump 1") # create pump control widget to read flowrate from pump 1 - adjust as needed for different pumps or flowrate retrieval methods
+        self.pump2 = pw.PumpControl(self, pumpName="Pump 2") # create pump control widget to read flowrate from pump 2 - adjust as needed for different pumps or flowrate retrieval methods
+        self.pump1_correction_factor_x_value = 1  # adjust if pump 1 has different calibration
+        self.pump2_correction_factor_x_value = 1   # adjust if pump 2 has different calibration
+        
+        self.logging_interval = 20 * 1000 #every 20 seconds in ms (starts when the script is run)
+        self.temp_logger = QtCore.QTimer()
+        self.temp_logger.timeout.connect(self.continuous_log_function)
+        self.temp_logger.start(self.logging_interval)
 
         self._max_points = 300 # used to limit number of points on plot for performance - adjust as needed (e.g. for 20s logging interval, 300 points = 100 minutes of data)
         self._temp_series_time = []
@@ -51,14 +59,9 @@ class PlatformMonitor(QtWidgets.QWidget):
         self._csv_initialized = False
         self._build_graphs()
 
-        self.logging_interval = 20 * 1000 #every 20 seconds in ms (starts when the script is run)
-        self.temp_logger = QtCore.QTimer()
-        self.temp_logger.timeout.connect(self.continuous_log_function)
-        self.temp_logger.start(self.logging_interval)
+        
 
-        self.pump1 = pw.PumpControl(self, pumpName="Pump 1") # create pump control widget to read flowrate from pump 1 - adjust as needed for different pumps or flowrate retrieval methods
-        self.pump2 = pw.PumpControl(self, pumpName="Pump 2") # create pump control widget to read flowrate from pump 2 - adjust as needed for different pumps or flowrate retrieval methods
-
+        
 
 
     def _build_graphs(self):
@@ -91,10 +94,30 @@ class PlatformMonitor(QtWidgets.QWidget):
         self.flowrate_plot.addLegend()
         self.layout.addWidget(self.flowrate_plot, 1, 0)
 
-        # Add export button
+        # Add controls in bottom-right
+        controls_widget = QtWidgets.QWidget()
+        controls_layout = QtWidgets.QVBoxLayout(controls_widget)
+        
+        # Logging interval control
+        interval_group = QtWidgets.QGroupBox("Logging Settings")
+        interval_layout = QtWidgets.QHBoxLayout(interval_group)
+        interval_label = QtWidgets.QLabel("Interval (sec):")
+        self.logging_interval_spinbox = QtWidgets.QSpinBox()
+        self.logging_interval_spinbox.setRange(1, 3600)
+        self.logging_interval_spinbox.setValue(int(self.logging_interval / 1000))
+        self.logging_interval_spinbox.setSuffix(" s")
+        self.logging_interval_spinbox.valueChanged.connect(self.update_logging_interval)
+        interval_layout.addWidget(interval_label)
+        interval_layout.addWidget(self.logging_interval_spinbox)
+        controls_layout.addWidget(interval_group)
+        
+        # Export button
         self.export_button = QtWidgets.QPushButton("Export Data")
         self.export_button.clicked.connect(self.export_data)
-        self.layout.addWidget(self.export_button, 1, 1)
+        controls_layout.addWidget(self.export_button)
+        controls_layout.addStretch()
+        
+        self.layout.addWidget(controls_widget, 1, 1)
 
     ##### Temperature relies on furnace thermocouple 
     def safe_read_temp(self): # temperature read with retries - otherwise may throw error and stop program
@@ -107,9 +130,15 @@ class PlatformMonitor(QtWidgets.QWidget):
         print("[Error] Failed to read temperature after 3 attempts — returning NaN.")
         return float('nan')
 
+    def update_logging_interval(self, value):
+        """Update the logging interval when spinbox value changes"""
+        self.logging_interval = value * 1000  # Convert seconds to milliseconds
+        self.temp_logger.setInterval(self.logging_interval)
+        print(f"Logging interval updated to {value} seconds")
 
 
-    def _update_plot(self, now, temp, pressure_p1, pressure_p2, flow_p1, flow_p2):
+
+    def _update_plot(self, now, temp, pressure_pump1, pressure_pump2, flow_pump1, flow_pump2):
         elapsed_time = (now - self.start_time_int).total_seconds() / 60.0
         
         # Update temperature data
@@ -122,9 +151,9 @@ class PlatformMonitor(QtWidgets.QWidget):
         
         # Update pressure data
         self._pressure_pump1_time.append(elapsed_time)
-        self._pressure_pump1_value.append(pressure_p1)
+        self._pressure_pump1_value.append(pressure_pump1)
         self._pressure_pump2_time.append(elapsed_time)
-        self._pressure_pump2_value.append(pressure_p2)
+        self._pressure_pump2_value.append(pressure_pump2)
         if len(self._pressure_pump1_time) > self._max_points:
             self._pressure_pump1_time = self._pressure_pump1_time[-self._max_points:]
             self._pressure_pump1_value = self._pressure_pump1_value[-self._max_points:]
@@ -134,11 +163,11 @@ class PlatformMonitor(QtWidgets.QWidget):
         self.pressure_curve_pump2.setData(self._pressure_pump2_time, self._pressure_pump2_value)
         
         # Update flowrate data
-        cumulative_flow = flow_p1 + flow_p2
+        cumulative_flow = flow_pump1 + flow_pump2   
         self._flow_pump1_time.append(elapsed_time)
-        self._flow_pump1_value.append(flow_p1)
+        self._flow_pump1_value.append(flow_pump1*self.pump1_correction_factor_x_value)
         self._flow_pump2_time.append(elapsed_time)
-        self._flow_pump2_value.append(flow_p2)
+        self._flow_pump2_value.append(flow_pump2*self.pump2_correction_factor_x_value)
         self._flow_cumulative_time.append(elapsed_time)
         self._flow_cumulative_value.append(cumulative_flow)
         if len(self._flow_pump1_time) > self._max_points:
@@ -183,34 +212,51 @@ class PlatformMonitor(QtWidgets.QWidget):
         now = datetime.datetime.now()
         elapsed_time = (now - self.start_time_int).total_seconds() / 60.0
         
-        # Read pump data
-        flow_pump1 = float(self.pump1.read_flow()) if hasattr(self.pump1, 'read_flow') else 0.0
-        flow_pump2 = float(self.pump2.read_flow()) if hasattr(self.pump2, 'read_flow') else 0.0
-        pressure_pump1 = float(self.pump1.read_pressure()) if hasattr(self.pump1, 'read_pressure') else 0.0
-        pressure_pump2 = float(self.pump2.read_pressure()) if hasattr(self.pump2, 'read_pressure') else 0.0
+        # Read pump data with error handling
+        try:
+            flow_pump1 = float(self.pump1.read_flow()) if hasattr(self.pump1, 'read_flow') else 0.0
+        except (TypeError, ValueError, AttributeError) as e:
+            print(f"[Warning] Failed to read flow from pump 1: {e}")
+            flow_pump1 = float('NaN')
         
+        try:
+            flow_pump2 = float(self.pump2.read_flow()) if hasattr(self.pump2, 'read_flow') else 0.0
+        except (TypeError, ValueError, AttributeError) as e:
+            print(f"[Warning] Failed to read flow from pump 2: {e}")
+            flow_pump2 = float('NaN')
+        
+        try:
+            pressure_pump1 = float(self.pump1.read_pressure()) if hasattr(self.pump1, 'read_pressure') else 0.0
+        except (TypeError, ValueError, AttributeError) as e:
+            print(f"[Warning] Failed to read pressure from pump 1: {e}")
+            pressure_pump1 = float('NaN')
+        
+        try:
+            pressure_pump2 = float(self.pump2.read_pressure()) if hasattr(self.pump2, 'read_pressure') else 0.0
+        except (TypeError, ValueError, AttributeError) as e:
+            print(f"[Warning] Failed to read pressure from pump 2: {e}")
+            pressure_pump2 = float('NaN')
+
         self._update_plot(now, temp, pressure_pump1, pressure_pump2, flow_pump1, flow_pump2)
 
 
-        pump1_correction_factor_x_value = 1  # adjust if pump 1 has different calibration
-        pump2_correction_factor_x_value = 1   # adjust if pump 2 has different calibration
         
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cumulative_flow = flow_pump1 + flow_pump2
 
-        df_entry = pd.DataFrame([{
+        df_entry = pd.DataFrame({
             "Time": timestamp,
             "Elapsed Time": elapsed_time,
             "Temperature": temp,
             "Step": getattr(self,"_sequence_index",None),
-            "Flow_A": flow_pump1 * pump1_correction_factor_x_value,
-            "Flow_B": flow_pump2 * pump2_correction_factor_x_value,
+            "Flow_A": flow_pump1 * self.pump1_correction_factor_x_value,
+            "Flow_B": flow_pump2 * self.pump2_correction_factor_x_value,
             "Cumulative Flow": cumulative_flow,
             "Pressure_A": pressure_pump1,
             "Pressure_B": pressure_pump2,
             "Event": event,
             "residence_time": None # placeholder for residence time calculation - implement as needed
-        }])
+        })
 
         if not self._csv_initialized:
             df_entry.to_csv(log_path, index=False, mode='w')
