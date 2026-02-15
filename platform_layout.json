@@ -17,5 +17,10 @@
       "type": "Vici 2pos switching",
       "com_port": "COM5"
     }
-  ]
+  ],
+  "thermocontroller": {
+    "name": "Eurotherm 3216",
+    "com_port": "COM1",
+    "target_temp": "70"
+  }
 }

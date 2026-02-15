@@ -3,6 +3,7 @@ import os
 from PyQt5 import QtWidgets, QtCore
 import pumpWidget as pw
 import valveWidget as vw
+import thermocontrollerwidget as tcw
 
 ### Class used to define all apparatus available for automated experiments ###
 
@@ -68,6 +69,15 @@ class PlatformControl(QtWidgets.QWidget):
         self.valve_columns = 4
         self.addValveButton.clicked.connect(self.add_valve)
 
+######################################## Thermocontroller ########################################
+        self.thermocontrollerBox = QtWidgets.QGroupBox("Thermocontroller")
+        self.thermocontrollerBox.setMaximumHeight(400)
+        self.thermocontrollerBox.setMaximumWidth(300)
+        self.thermocontrollerBoxLayout = QtWidgets.QVBoxLayout(self.thermocontrollerBox)
+        self.thermocontroller = tcw.ThermocontrollerControl(self)
+        self.thermocontrollerBoxLayout.addWidget(self.thermocontroller)
+        self._layout.addWidget(self.thermocontrollerBox, 0, 1, 2, 1, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
+
     def add_pump(self):
         self.pump_count += 1
         pump_widget = pw.PumpControl(self, pumpName=f"Pump {self.pump_count}")
@@ -128,9 +138,16 @@ class PlatformControl(QtWidgets.QWidget):
                 "com_port": valve_widget.comPort.currentText(),
             })
 
+        thermocontroller = {
+            "name": self.thermocontroller.nameEdit.text().strip(),
+            "com_port": self.thermocontroller.comPort.currentText(),
+            "target_temp": self.thermocontroller.targetTempText.text().strip(),
+        }
+
         data = {
             "pumps": pumps,
             "valves": valves,
+            "thermocontroller": thermocontroller,
         }
 
         with open(self._platform_file_path(), "w", encoding="utf-8") as file_handle:
@@ -169,3 +186,13 @@ class PlatformControl(QtWidgets.QWidget):
             self._set_combo_text(valve_widget.valveTypeCombo, valve_data.get("type"))
             valve_widget.formatWidget(valve_widget.valveTypeCombo.currentText())
             self._set_combo_text(valve_widget.comPort, valve_data.get("com_port"))
+
+        # Load thermocontroller settings
+        thermocontroller_data = data.get("thermocontroller", {})
+        saved_name = thermocontroller_data.get("name") or self.thermocontroller.nameEdit.text()
+        self.thermocontroller._default_name = saved_name
+        self.thermocontroller.nameEdit.setText(saved_name)
+        self._set_combo_text(self.thermocontroller.comPort, thermocontroller_data.get("com_port"))
+        target_temp = thermocontroller_data.get("target_temp", "")
+        if target_temp:
+            self.thermocontroller.targetTempText.setText(target_temp)

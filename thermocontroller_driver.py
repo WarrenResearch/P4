@@ -16,7 +16,6 @@ from serial.tools import list_ports
 import minimalmodbus
 
 #-------------------Eurotherm settings-------------------
-FURNACE_ADDRESS = 'COM6' # change to the COM port the furnace is connected to. Can be found using get_ports() function below.
 RESET_TEMPERATURE = 25       #temperature the furnace resets to
 #-------------------Eurotherm settings-------------------
 
@@ -35,13 +34,15 @@ class Furnace(minimalmodbus.Instrument):
 
     default_temp = RESET_TEMPERATURE
 
-    def __init__(self):
-        self.port = FURNACE_ADDRESS
+    def __init__(self, port=None):
+        self.port = port
         self.target = self.default_temp
+        self.status = False
         try:
             super().__init__(self.port, 1)
         except Exception as e:
             print('Could not connect to the {}!'.format(self.__class__.__name__))
+            print(f'Error: {str(e)}')
             
         else:
             print('{} connected at {}'.format(
@@ -321,9 +322,9 @@ def get_ports():
     return {comport.manufacturer: comport.device for comport in list_ports.comports()}
 
 
-def connect():
+def connect(port=None):
     # return LCR(), DAQ(), GasControllers(), Furnace()
-    return Furnace()
+    return Furnace(port=port)
 
 
 def reconnect(lab_obj):
