@@ -8,54 +8,55 @@ import os
 import pandas as pd
 import pumpWidget as pw
 
-''' code for tab 5 - platform monitor, which will show live data from the platform, 
- and allow the user to monitor the state of the platform during an experiment 
- setup:
-    - temperature: thermocouple read from furnace (via modbus)
-    - individual flow rates: read from jasco pump
-    - cumulative flow rates: sum of flow rates from jasco pump
-    - pressure: read from jasco pump
-    - residence time: calculated based on flow rates and reactor volume
+"""
+Platform monitor (tab 5) for live process readout and logging.
 
- '''
+Signals monitored:
+- Temperature from the furnace thermocouple (Modbus read)
+- Individual pump flow rates
+- Cumulative flow rate
+- Pump pressures
+- Placeholders for derived metrics (e.g., residence time)
+"""
 
 
 class PlatformMonitor(QtWidgets.QWidget):
+    """Live plotting + periodic CSV logging for key platform process variables."""
+
     def __init__(self, parent=None, main=None):
         super(PlatformMonitor, self).__init__(parent)
         self.main = main
 
         self.layout = QtWidgets.QGridLayout(self)
 
-        self.thermo = Furnace() # create thermocontroller instance
-        self.a = 10 # correction factor for temperature read (to match external thermometer) - adjust as needed
-        self.start_time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") # string start time for log filename
-        self.start_time_int = datetime.datetime.now() # datetime object for reaction time calculations
+        self.thermo = Furnace() # Thermocontroller instance used for temperature readback.
+        self.a = 10 # Temperature correction factor (thermocouple -> external reference).
+        self.start_time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") # Used in log filename.
+        self.start_time_int = datetime.datetime.now() # Used to calculate elapsed time in minutes.
 
-        self.pump1 = pw.PumpControl(self, pumpName="Pump 1") # create pump control widget to read flowrate from pump 1 - adjust as needed for different pumps or flowrate retrieval methods
-        self.pump2 = pw.PumpControl(self, pumpName="Pump 2") # create pump control widget to read flowrate from pump 2 - adjust as needed for different pumps or flowrate retrieval methods
-        self.pump1_correction_factor_x_value = 1  # adjust if pump 1 has different calibration
-        self.pump2_correction_factor_x_value = 1   # adjust if pump 2 has different calibration
+        # Pump widgets used for flow/pressure readback in this monitor.
+        self.pump1 = pw.PumpControl(self, pumpName="Pump 1")
+        self.pump2 = pw.PumpControl(self, pumpName="Pump 2")
+        # Per-pump scaling for calibration compensation.
+        self.pump1_correction_factor_x_value = 1
+        self.pump2_correction_factor_x_value = 1
         
-        self.logging_interval = 60 * 1000 #every 60 seconds in ms (starts when the script is run)
+        # Logging timer (interval in milliseconds).
+        self.logging_interval = 60 * 1000
         self.temp_logger = QtCore.QTimer()
         self.temp_logger.timeout.connect(self.continuous_log_function)
         self.temp_logger.start(self.logging_interval)
 
-        self._max_points = 300 # used to limit number of points on plot for performance - adjust as needed (e.g. for 20s logging interval, 300 points = 100 minutes of data)
-        self._temp_series_time = []
-        self._temp_series_value = []
-        self._pressure_pump1_time = []
+        # Rolling in-memory buffers for plotting.
+        self._max_points = 300 # Plot history length cap for UI responsiveness.
+        self._time_series = [] # Shared x-axis: elapsed time [min].
+        self._temp_series_value = [] 
         self._pressure_pump1_value = []
-        self._pressure_pump2_time = []
         self._pressure_pump2_value = []
-        self._flow_pump1_time = []
         self._flow_pump1_value = []
-        self._flow_pump2_time = []
         self._flow_pump2_value = []
-        self._flow_cumulative_time = []
         self._flow_cumulative_value = []
-        self._log_dataframe = pd.DataFrame()  # store accumulated log data for export
+        self._log_dataframe = pd.DataFrame()  # In-memory table mirrored to CSV on each cycle.
         self._csv_initialized = False
         self._build_graphs()
 
@@ -63,6 +64,7 @@ class PlatformMonitor(QtWidgets.QWidget):
 
     
     def _build_graphs(self):
+        """Create plots and user controls for the monitor tab."""
         # Temperature plot
         self.temp_plot = pg.PlotWidget(title="Reactor Temperature")
         self.temp_plot.setLabel("left", "Temperature", units="C")
@@ -117,70 +119,62 @@ class PlatformMonitor(QtWidgets.QWidget):
         
         self.layout.addWidget(controls_widget, 1, 1)
 
-    ##### Temperature relies on furnace thermocouple 
-    def safe_read_temp(self): # temperature read with retries - otherwise may throw error and stop program
+    ##### Temperature relies on furnace thermocouple
+    def safe_read_temp(self):
+        """Read temperature with retry logic to avoid transient Modbus failures."""
         for attempt in range(3):
             try:
-                return self.thermo.indicated() / self.a # read temperature and apply correction factor
+                return self.thermo.indicated() / self.a
             except Exception as e: 
-               print(f"[Warning] Modbus read failed (attempt {attempt+1}/3): {e}") #log warning 
-               time.sleep(1) # wait before retrying
+               print(f"[Warning] Modbus read failed (attempt {attempt+1}/3): {e}")
+               time.sleep(1)
         print("[Error] Failed to read temperature after 3 attempts — returning NaN.")
         return float('nan')
 
     def update_logging_interval(self, value):
-        """Update the logging interval when spinbox value changes"""
-        self.logging_interval = value * 1000  # Convert seconds to milliseconds
+        """Update timer interval from UI value in seconds."""
+        self.logging_interval = value * 1000
         self.temp_logger.setInterval(self.logging_interval)
         print(f"Logging interval updated to {value} seconds")
 
 
 
     def _update_plot(self, now, temp, pressure_pump1, pressure_pump2, flow_pump1, flow_pump2):
+        """Append latest values to buffers and refresh all plot curves."""
         elapsed_time = (now - self.start_time_int).total_seconds() / 60.0
         
-        # Update temperature data
-        self._temp_series_time.append(elapsed_time)
+        # Append new sample to the shared time axis and temperature series.
+        self._time_series.append(elapsed_time)
         self._temp_series_value.append(temp)
-        if len(self._temp_series_time) > self._max_points:
-            self._temp_series_time = self._temp_series_time[-self._max_points:]
+
+        # Keep all series the same length when max history is reached.
+        if len(self._time_series) > self._max_points:
+            self._time_series = self._time_series[-self._max_points:]
             self._temp_series_value = self._temp_series_value[-self._max_points:]
-        self.temp_curve.setData(self._temp_series_time, self._temp_series_value)
-        
-        # Update pressure data
-        self._pressure_pump1_time.append(elapsed_time)
-        self._pressure_pump1_value.append(pressure_pump1)
-        self._pressure_pump2_time.append(elapsed_time)
-        self._pressure_pump2_value.append(pressure_pump2)
-        if len(self._pressure_pump1_time) > self._max_points:
-            self._pressure_pump1_time = self._pressure_pump1_time[-self._max_points:]
             self._pressure_pump1_value = self._pressure_pump1_value[-self._max_points:]
-            self._pressure_pump2_time = self._pressure_pump2_time[-self._max_points:]
             self._pressure_pump2_value = self._pressure_pump2_value[-self._max_points:]
-        self.pressure_curve_pump1.setData(self._pressure_pump1_time, self._pressure_pump1_value)
-        self.pressure_curve_pump2.setData(self._pressure_pump2_time, self._pressure_pump2_value)
-        
-        # Update flowrate data
-        cumulative_flow = flow_pump1 + flow_pump2   
-        self._flow_pump1_time.append(elapsed_time)
-        self._flow_pump1_value.append(flow_pump1*self.pump1_correction_factor_x_value)
-        self._flow_pump2_time.append(elapsed_time)
-        self._flow_pump2_value.append(flow_pump2*self.pump2_correction_factor_x_value)
-        self._flow_cumulative_time.append(elapsed_time)
-        self._flow_cumulative_value.append(cumulative_flow)
-        if len(self._flow_pump1_time) > self._max_points:
-            self._flow_pump1_time = self._flow_pump1_time[-self._max_points:]
             self._flow_pump1_value = self._flow_pump1_value[-self._max_points:]
-            self._flow_pump2_time = self._flow_pump2_time[-self._max_points:]
             self._flow_pump2_value = self._flow_pump2_value[-self._max_points:]
-            self._flow_cumulative_time = self._flow_cumulative_time[-self._max_points:]
             self._flow_cumulative_value = self._flow_cumulative_value[-self._max_points:]
-        self.flow_curve_pump1.setData(self._flow_pump1_time, self._flow_pump1_value)
-        self.flow_curve_pump2.setData(self._flow_pump2_time, self._flow_pump2_value)
-        self.flow_curve_cumulative.setData(self._flow_cumulative_time, self._flow_cumulative_value)
+        self.temp_curve.setData(self._time_series, self._temp_series_value)
+        
+        # Pressure series (one per pump) plotted against shared time axis.
+        self._pressure_pump1_value.append(pressure_pump1)
+        self._pressure_pump2_value.append(pressure_pump2)
+        self.pressure_curve_pump1.setData(self._time_series, self._pressure_pump1_value)
+        self.pressure_curve_pump2.setData(self._time_series, self._pressure_pump2_value)
+        
+        # Flow series and cumulative flow, all against shared time axis.
+        cumulative_flow = flow_pump1 + flow_pump2   
+        self._flow_pump1_value.append(flow_pump1*self.pump1_correction_factor_x_value)
+        self._flow_pump2_value.append(flow_pump2*self.pump2_correction_factor_x_value)
+        self._flow_cumulative_value.append(cumulative_flow)
+        self.flow_curve_pump1.setData(self._time_series, self._flow_pump1_value)
+        self.flow_curve_pump2.setData(self._time_series, self._flow_pump2_value)
+        self.flow_curve_cumulative.setData(self._time_series, self._flow_cumulative_value)
 
     def export_data(self):
-        """Export accumulated log data to CSV with file dialog"""
+        """Export accumulated in-memory log data to a user-selected CSV file."""
         if self._log_dataframe.empty:
             QtWidgets.QMessageBox.warning(self, "No Data", "No data to export yet.")
             return
@@ -200,17 +194,18 @@ class PlatformMonitor(QtWidgets.QWidget):
                 QtWidgets.QMessageBox.critical(self, "Error", f"Failed to export: {str(e)}")
 
 
-    def continuous_log_function(self,event=None): #logging function that runs every x seconds (set by self.logging_interval)
+    def continuous_log_function(self,event=None):
+        """Periodic acquisition + plot update + append to experiment log CSV."""
         log_dir = "Experimental_logs"
         if not os.path.isdir(log_dir):
             os.makedirs(log_dir, exist_ok=True)
-        log_path = os.path.join(log_dir, f"Experimental_log {self.start_time_str}.csv") #log path with start time in filename
+        log_path = os.path.join(log_dir, f"Experimental_log {self.start_time_str}.csv")
 
         temp = self.safe_read_temp()
         now = datetime.datetime.now()
         elapsed_time = (now - self.start_time_int).total_seconds() / 60.0
         
-        # Read pump data with error handling
+        # Read pump values with independent error handling so one failure does not block logging.
         try:
             flow_pump1 = float(self.pump1.read_flow()) if hasattr(self.pump1, 'read_flow') else 0.0
         except (TypeError, ValueError, AttributeError) as e:
@@ -242,6 +237,7 @@ class PlatformMonitor(QtWidgets.QWidget):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cumulative_flow = flow_pump1 + flow_pump2
 
+        # Build one-row dataframe entry for this logging tick.
         df_entry = pd.DataFrame({
             "Time": timestamp,
             "Elapsed Time": elapsed_time,
@@ -256,6 +252,7 @@ class PlatformMonitor(QtWidgets.QWidget):
             "residence_time": None # placeholder for residence time calculation - implement as needed
         })
 
+        # First write includes header, subsequent writes append rows only.
         if not self._csv_initialized:
             df_entry.to_csv(log_path, index=False, mode='w')
             self._csv_initialized = True
@@ -264,6 +261,7 @@ class PlatformMonitor(QtWidgets.QWidget):
             df_entry.to_csv(log_path, index=False, mode='a', header=False)
             self._log_dataframe = pd.concat([self._log_dataframe, df_entry], ignore_index=True)
         
+        # Force flush/sync to reduce risk of data loss on unexpected shutdown.
         with open(log_path, "a") as f:
             f.flush()
             os.fsync(f.fileno())
