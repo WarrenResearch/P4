@@ -42,8 +42,8 @@ class PlatformMonitor(QtWidgets.QWidget):
         
         # Logging timer (interval in milliseconds).
         self.logging_interval = 60 * 1000
-        self.temp_logger = QtCore.QTimer()
-        self.temp_logger.timeout.connect(self.continuous_log_function)
+        self.temp_logger = QtCore.QTimer(self)
+        self.temp_logger.timeout.connect(self.continuous_log_function, QtCore.Qt.UniqueConnection)
         self.temp_logger.start(self.logging_interval)
 
         # Rolling in-memory buffers for plotting.
@@ -218,10 +218,13 @@ class PlatformMonitor(QtWidgets.QWidget):
 
     def continuous_log_function(self,event=None):
         """Periodic acquisition + plot update + append to experiment log CSV."""
+
+        # set up directory and filename for logging - creates new file for each run with timestamp in name, stored in Experimental_logs folder.
         log_dir = "Experimental_logs"
         if not os.path.isdir(log_dir):
             os.makedirs(log_dir, exist_ok=True)
-        log_path = os.path.join(log_dir, f"Experimental_log {self.start_time_str}.csv")
+
+        log_path = os.path.join(log_dir, f"Experimental_log_{self.start_time_str}.csv")
 
         temp = self.safe_read_temp()
         now = datetime.datetime.now()
@@ -253,8 +256,6 @@ class PlatformMonitor(QtWidgets.QWidget):
             pressure_pump2 = float('NaN')
 
         self._update_plot(now, temp, pressure_pump1, pressure_pump2, flow_pump1, flow_pump2)
-
-
         
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cumulative_flow = flow_pump1 + flow_pump2
@@ -262,7 +263,7 @@ class PlatformMonitor(QtWidgets.QWidget):
         # Build one-row dataframe entry for this logging tick.
         df_entry = pd.DataFrame([{
             "Time": timestamp,
-            "Elapsed Time": elapsed_time,
+            "Elapsed Time": round(elapsed_time, 2),
             "Temperature": temp,
             "Step": getattr(self,"_sequence_index",None),
             "Flow_A": flow_pump1 * self.pump1_correction_factor_x_value,
@@ -274,19 +275,17 @@ class PlatformMonitor(QtWidgets.QWidget):
             "residence_time": None # placeholder for residence time calculation - implement as needed
         }])
 
-        # First write includes header, subsequent writes append rows only.
-        if not self._csv_initialized:
-            df_entry.to_csv(log_path, index=False, mode='w')
-            self._csv_initialized = True
-            self._log_dataframe = df_entry.copy()
+        # Check if file exists to decide on header
+        file_exists = os.path.isfile(log_path)
+    
+        # Append to CSV - creates new file with header if it doesn't exist, otherwise appends without header.
+        df_entry.to_csv(log_path, mode='a', index=False, header=not file_exists)
+
+        # 6. Update In-Memory DataFrame for the 'Export' button
+        if not hasattr(self, '_log_dataframe') or self._log_dataframe is None:
+            self._log_dataframe = df_entry
         else:
-            df_entry.to_csv(log_path, index=False, mode='a', header=False)
             self._log_dataframe = pd.concat([self._log_dataframe, df_entry], ignore_index=True)
-        
-        # Force flush/sync to reduce risk of data loss on unexpected shutdown.
-        with open(log_path, "a") as f:
-            f.flush()
-            os.fsync(f.fileno())
 
 
 
