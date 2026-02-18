@@ -285,7 +285,7 @@ class Furnace(minimalmodbus.Instrument):
         self.serial.reset_output_buffer()
 
     def shutdown(self):
-        self.setpoint_1(20)
+        self.setpoint_1(200)  # Set to a safe temperature (e.g., 20°C)
         self.timer_status('reset')
 
     def reconnect(self):

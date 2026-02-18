@@ -1,7 +1,6 @@
 from PyQt5 import QtCore, QtWidgets
 import pyqtgraph as pg
 import jasco2080
-from thermocontroller_driver import Furnace
 import time
 import datetime
 import os
@@ -29,7 +28,7 @@ class PlatformMonitor(QtWidgets.QWidget):
 
         self.layout = QtWidgets.QGridLayout(self)
 
-        self.thermo = Furnace() # Thermocontroller instance used for temperature readback.
+        # Reference the thermocontroller instance from Platform Control (shared connection).
         self.a = 10 # Temperature correction factor (thermocouple -> external reference).
         self.start_time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") # Used in log filename.
         self.start_time_int = datetime.datetime.now() # Used to calculate elapsed time in minutes.
@@ -122,14 +121,29 @@ class PlatformMonitor(QtWidgets.QWidget):
     ##### Temperature relies on furnace thermocouple
     def safe_read_temp(self):
         """Read temperature with retry logic to avoid transient Modbus failures."""
+        # Access the shared thermocontroller from Platform Control tab.
+        if self.main is None or not hasattr(self.main, 'controller'):
+            return float('nan')
+        
+        thermo_widget = getattr(self.main.controller, 'thermocontroller', None)
+        if thermo_widget is None:
+            return float('nan')
+        
+        thermo_obj = getattr(thermo_widget, 'thermocontrollerObj', None)
+        if thermo_obj is None:
+            return float('nan')
+        
+        # Retry logic for Modbus communication.
         for attempt in range(3):
             try:
-                return self.thermo.indicated() / self.a
+                return thermo_obj.indicated() / self.a
             except Exception as e: 
-               print(f"[Warning] Modbus read failed (attempt {attempt+1}/3): {e}")
+               if attempt == 2:  # Only warn on final attempt
+                   print(f"[Warning] Temperature read failed after 3 attempts: {e}")
                time.sleep(1)
-        print("[Error] Failed to read temperature after 3 attempts — returning NaN.")
         return float('nan')
+
+
 
     def update_logging_interval(self, value):
         """Update timer interval from UI value in seconds."""
@@ -199,7 +213,7 @@ class PlatformMonitor(QtWidgets.QWidget):
 
 
 
-    
+
 
 
     def continuous_log_function(self,event=None):
@@ -246,7 +260,7 @@ class PlatformMonitor(QtWidgets.QWidget):
         cumulative_flow = flow_pump1 + flow_pump2
 
         # Build one-row dataframe entry for this logging tick.
-        df_entry = pd.DataFrame({
+        df_entry = pd.DataFrame([{
             "Time": timestamp,
             "Elapsed Time": elapsed_time,
             "Temperature": temp,
@@ -258,7 +272,7 @@ class PlatformMonitor(QtWidgets.QWidget):
             "Pressure_B": pressure_pump2,
             "Event": event,
             "residence_time": None # placeholder for residence time calculation - implement as needed
-        })
+        }])
 
         # First write includes header, subsequent writes append rows only.
         if not self._csv_initialized:

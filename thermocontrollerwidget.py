@@ -43,7 +43,7 @@ class ThermocontrollerControl(QtWidgets.QWidget):
         self.targetTempLabel.setFixedSize(140, 20)
         self.targetTempText = QtWidgets.QLineEdit(self)
         self.targetTempText.setFixedSize(75, 20)
-        self.targetTempText.setPlaceholderText("e.g., 350")
+        self.targetTempText.setPlaceholderText("e.g., 70")
 
         # Connect button
         self.connectButton = QtWidgets.QPushButton("CONNECT")
@@ -187,7 +187,7 @@ class ThermocontrollerControl(QtWidgets.QWidget):
                 return
             
             targetTemp = float(self.targetTempText.text())
-            self.thermocontrollerObj.setpoint_1(targetTemp)
+            self.thermocontrollerObj.setpoint_1(targetTemp*10)
             print(f'Target temperature set to {targetTemp}°C')
             
             msgbox = QMessageBox(self)
@@ -213,7 +213,7 @@ class ThermocontrollerControl(QtWidgets.QWidget):
         """Update the current temperature display from the thermocontroller"""
         try:
             if self.thermocontrollerObj:
-                currentTemp = self.thermocontrollerObj.indicated()
+                currentTemp = self.thermocontrollerObj.indicated()/10
                 if currentTemp is not False:
                     self.currentTempDisplay.setText(f"{currentTemp:.1f}")
                 else:
@@ -224,6 +224,6 @@ class ThermocontrollerControl(QtWidgets.QWidget):
 
 
     def safetyShutdown(self):
-        if self.thermocontrollerObj and self.thermocontrollerObj.indicated() > 150:
-            self.thermocontrollerObj.setpoint_1(20)
+        if self.thermocontrollerObj.indicated() > 1500:  # If temperature exceeds 150°C
+            self.thermocontrollerObj.setpoint_1(200)  # Set to a safe temperature (e.g., 20°C)
             print("Safety shutdown activated: temperature exceeded 150°C, setpoint set to 20°C")
