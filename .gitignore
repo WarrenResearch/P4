@@ -37,3 +37,7 @@ Thumbs.db
 *.log
 *.tmp
 *.bak
+
+.xls
+.xlsx
+.csv

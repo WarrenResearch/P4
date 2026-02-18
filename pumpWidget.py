@@ -278,7 +278,6 @@ class PumpControl(QtWidgets.QWidget):
 
         elif pumpModel == "Jasco PU2080":
             self.pumpObj = jasco2080.JascoPU2080(COM_number)
-            ''' error with this section, COMport problems'''
         
         elif pumpModel == "MilliGAT HF":
             if self.pumpAddressText.text() == '':
@@ -362,3 +361,35 @@ class PumpControl(QtWidgets.QWidget):
             self.pumpObj.stopPump()
         else:
             print('No model selected')
+
+    def read_flow(self):
+        """Read current flow rate from pump. Returns flow in mL/min or 0.0 if not available."""
+        pumpModel = self.pumpModelCombo.currentText()
+        try:
+            if pumpModel == "Jasco PU2080":
+                result = self.pumpObj.read_flow()
+                return result
+            elif pumpModel == "Teledyne":
+                # Teledyne doesn't have hardware readback; return set value from UI
+                try:
+                    return float(self.setFlowrateText.text()) if self.setFlowrateText.text() else 0.0
+                except (ValueError, AttributeError):
+                    return 0.0
+            elif pumpModel in ("MilliGAT HF", "MilliGAT LF"):
+                # MilliGAT doesn't have hardware readback; return set value from UI
+                try:
+                    return float(self.setFlowrateText.text()) if self.setFlowrateText.text() else 0.0
+                except (ValueError, AttributeError):
+                    return 0.0
+            elif pumpModel in ("Chemyx Fusion 6000X", "Chemyx Fusion 4000X", "Chemyx Nexus 4000"):
+                # Chemyx pumps don't have hardware readback; return set value from UI
+                try:
+                    return float(self.setFlowrateText.text()) if self.setFlowrateText.text() else 0.0
+                except (ValueError, AttributeError):
+                    return 0.0
+            else:
+                return 0.0
+        except Exception as e:
+            print(f"Error reading flow from {pumpModel}: {e}")
+            return 0.0
+        

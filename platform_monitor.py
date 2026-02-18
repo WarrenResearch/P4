@@ -4,6 +4,7 @@ import jasco2080
 import time
 import datetime
 import os
+import math
 import pandas as pd
 import pumpWidget as pw
 
@@ -33,15 +34,12 @@ class PlatformMonitor(QtWidgets.QWidget):
         self.start_time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") # Used in log filename.
         self.start_time_int = datetime.datetime.now() # Used to calculate elapsed time in minutes.
 
-        # Pump widgets used for flow/pressure readback in this monitor.
-        self.pump1 = pw.PumpControl(self, pumpName="Pump 1")
-        self.pump2 = pw.PumpControl(self, pumpName="Pump 2")
         # Per-pump scaling for calibration compensation.
         self.pump1_correction_factor_x_value = 1
         self.pump2_correction_factor_x_value = 1
         
         # Logging timer (interval in milliseconds).
-        self.logging_interval = 60 * 1000
+        self.logging_interval = 10 * 1000
         self.temp_logger = QtCore.QTimer(self)
         self.temp_logger.timeout.connect(self.continuous_log_function, QtCore.Qt.UniqueConnection)
         self.temp_logger.start(self.logging_interval)
@@ -117,6 +115,15 @@ class PlatformMonitor(QtWidgets.QWidget):
         controls_layout.addStretch()
         
         self.layout.addWidget(controls_widget, 1, 1)
+
+    def _get_platform_pumps(self):
+        """Get pump list from Platform Control. Returns list of pump widgets or empty list."""
+        if self.main is None or not hasattr(self.main, 'controller'):
+            return []
+        controller = self.main.controller
+        if hasattr(controller, 'pump_widgets'):
+            return controller.pump_widgets
+        return []
 
     ##### Temperature relies on furnace thermocouple
     def safe_read_temp(self):
@@ -230,35 +237,62 @@ class PlatformMonitor(QtWidgets.QWidget):
         now = datetime.datetime.now()
         elapsed_time = (now - self.start_time_int).total_seconds() / 60.0
         
-        # Read pump values with independent error handling so one failure does not block logging.
-        try:
-            flow_pump1 = float(self.pump1.read_flow()) if hasattr(self.pump1, 'read_flow') else 0.0
-        except (TypeError, ValueError, AttributeError) as e:
-            print(f"[Warning] Failed to read flow from pump 1: {e}")
-            flow_pump1 = float('NaN')
+        # Get configured pumps from Platform Control instead of using hardcoded pump1/pump2.
+        pump_widgets = self._get_platform_pumps()
         
-        try:
-            flow_pump2 = float(self.pump2.read_flow()) if hasattr(self.pump2, 'read_flow') else 0.0
-        except (TypeError, ValueError, AttributeError) as e:
-            print(f"[Warning] Failed to read flow from pump 2: {e}")
-            flow_pump2 = float('NaN')
+        # Read flow and pressure from first two pumps (or use NaN if not available).
+        flow_pump1 = float('NaN')
+        pressure_pump1 = float('NaN')
+        flow_pump2 = float('NaN')
+        pressure_pump2 = float('NaN')
         
-        try:
-            pressure_pump1 = float(self.pump1.read_pressure()) if hasattr(self.pump1, 'read_pressure') else 0.0
-        except (TypeError, ValueError, AttributeError) as e:
-            print(f"[Warning] Failed to read pressure from pump 1: {e}")
-            pressure_pump1 = float('NaN')
+        if len(pump_widgets) > 0:
+            try:
+                flow_result = pump_widgets[0].read_flow()
+                flow_pump1 = float(flow_result or 0.0)
+            except Exception as e:
+                print(f"[Warning] Failed to read flow from pump 0: {type(e).__name__}: {e}")
+                flow_pump1 = float('NaN')
+            
+            try:
+                pressure_pump1 = float(pump_widgets[0].read_pressure()) if hasattr(pump_widgets[0], 'read_pressure') else 0.0
+            except Exception as e:
+                print(f"[Warning] Failed to read pressure from pump 0: {type(e).__name__}: {e}")
+                pressure_pump1 = float('NaN')
         
-        try:
-            pressure_pump2 = float(self.pump2.read_pressure()) if hasattr(self.pump2, 'read_pressure') else 0.0
-        except (TypeError, ValueError, AttributeError) as e:
-            print(f"[Warning] Failed to read pressure from pump 2: {e}")
-            pressure_pump2 = float('NaN')
+        if len(pump_widgets) > 1:
+            try:
+                flow_result = pump_widgets[1].read_flow()
+                flow_pump2 = float(flow_result or 0.0)
+            except Exception as e:
+                print(f"[Warning] Failed to read flow from pump 1: {type(e).__name__}: {e}")
+                flow_pump2 = float('NaN')
+            
+            try:
+                pressure_pump2 = float(pump_widgets[1].read_pressure()) if hasattr(pump_widgets[1], 'read_pressure') else 0.0
+            except Exception as e:
+                print(f"[Warning] Failed to read pressure from pump 1: {type(e).__name__}: {e}")
+                pressure_pump2 = float('NaN')
 
         self._update_plot(now, temp, pressure_pump1, pressure_pump2, flow_pump1, flow_pump2)
         
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cumulative_flow = flow_pump1 + flow_pump2
+        
+        # Only apply correction factors to valid (non-NaN) flow values.
+        try:
+            corrected_flow_a = flow_pump1 * self.pump1_correction_factor_x_value if not math.isnan(flow_pump1) else float('NaN')
+        except (TypeError, ValueError):
+            corrected_flow_a = float('NaN')
+        
+        try:
+            corrected_flow_b = flow_pump2 * self.pump2_correction_factor_x_value if not math.isnan(flow_pump2) else float('NaN')
+        except (TypeError, ValueError):
+            corrected_flow_b = float('NaN')
+        
+        try:
+            cumulative_flow = corrected_flow_a + corrected_flow_b if (not math.isnan(corrected_flow_a) and not math.isnan(corrected_flow_b)) else float('NaN')
+        except (TypeError, ValueError):
+            cumulative_flow = float('NaN')
 
         # Build one-row dataframe entry for this logging tick.
         df_entry = pd.DataFrame([{
@@ -266,8 +300,8 @@ class PlatformMonitor(QtWidgets.QWidget):
             "Elapsed Time": round(elapsed_time, 2),
             "Temperature": temp,
             "Step": getattr(self,"_sequence_index",None),
-            "Flow_A": flow_pump1 * self.pump1_correction_factor_x_value,
-            "Flow_B": flow_pump2 * self.pump2_correction_factor_x_value,
+            "Flow_A": corrected_flow_a,
+            "Flow_B": corrected_flow_b,
             "Cumulative Flow": cumulative_flow,
             "Pressure_A": pressure_pump1,
             "Pressure_B": pressure_pump2,
