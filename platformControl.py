@@ -29,9 +29,11 @@ class PlatformControl(QtWidgets.QWidget):
         self.addPumpButton = QtWidgets.QPushButton("Add Pump")
         self.savePlatformButton = QtWidgets.QPushButton("Save Platform")
         self.loadPlatformButton = QtWidgets.QPushButton("Load Platform")
+        self.setConfigButton = QtWidgets.QPushButton("Set Monitor Configuration")
         self.pumpsHeaderLayout.addWidget(self.addPumpButton)
         self.pumpsHeaderLayout.addWidget(self.savePlatformButton)
         self.pumpsHeaderLayout.addWidget(self.loadPlatformButton)
+        self.pumpsHeaderLayout.addWidget(self.setConfigButton)
         self.pumpsHeaderLayout.addStretch(1)
         self.pumpsBoxLayout.addLayout(self.pumpsHeaderLayout)
 
@@ -45,6 +47,7 @@ class PlatformControl(QtWidgets.QWidget):
         self.addPumpButton.clicked.connect(self.add_pump)
         self.savePlatformButton.clicked.connect(self.save_platform)
         self.loadPlatformButton.clicked.connect(self.load_platform)
+        self.setConfigButton.clicked.connect(self.set_monitor_configuration)
 
 
 ######################################## Valves ########################################
@@ -196,3 +199,15 @@ class PlatformControl(QtWidgets.QWidget):
         target_temp = thermocontroller_data.get("target_temp", "")
         if target_temp:
             self.thermocontroller.targetTempText.setText(target_temp)
+
+    def set_monitor_configuration(self):
+        """Trigger platform monitor to load pump configuration."""
+        if self.main is None or not hasattr(self.main, 'platform_monitor'):
+            QtWidgets.QMessageBox.warning(self, "Error", "Platform Monitor not available.")
+            return
+        
+        # Call the set_configuration method on platform_monitor
+        if hasattr(self.main.platform_monitor, 'set_configuration'):
+            self.main.platform_monitor.set_configuration()
+        else:
+            QtWidgets.QMessageBox.warning(self, "Error", "Platform Monitor configuration method not found.")

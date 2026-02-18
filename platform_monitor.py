@@ -34,9 +34,10 @@ class PlatformMonitor(QtWidgets.QWidget):
         self.start_time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") # Used in log filename.
         self.start_time_int = datetime.datetime.now() # Used to calculate elapsed time in minutes.
 
-        # Per-pump scaling for calibration compensation.
-        self.pump1_correction_factor_x_value = 1
-        self.pump2_correction_factor_x_value = 1
+        # Pump configuration will be loaded on demand via set_configuration() button.
+        self.pump_widgets = []
+        self.pump_names = []
+        self.correction_factors = {}
         
         # Logging timer (interval in milliseconds).
         self.logging_interval = 10 * 1000
@@ -47,14 +48,11 @@ class PlatformMonitor(QtWidgets.QWidget):
         # Rolling in-memory buffers for plotting.
         self._max_points = 300 # Plot history length cap for UI responsiveness.
         self._time_series = [] # Shared x-axis: elapsed time [min].
-        self._temp_series_value = [] 
-        self._pressure_pump1_value = []
-        self._pressure_pump2_value = []
-        self._flow_pump1_value = []
-        self._flow_pump2_value = []
+        self._temp_series_value = []
+        self._pump_flow_series = {}  # Flow data per pump (initialized after pump config).
+        self._pump_pressure_series = {}  # Pressure data per pump (initialized after pump config).
         self._flow_cumulative_value = []
         self._log_dataframe = pd.DataFrame()  # In-memory table mirrored to CSV on each cycle.
-        self._csv_initialized = False
         self._build_graphs()
 
         
@@ -70,25 +68,21 @@ class PlatformMonitor(QtWidgets.QWidget):
         self.temp_curve = self.temp_plot.plot([], [], pen=pg.mkPen(color="#e4572e", width=2))
         self.layout.addWidget(self.temp_plot, 0, 0)
 
-        # Pressure plot
+        # Pressure plot - pump curves will be added after set_configuration()
         self.pressure_plot = pg.PlotWidget(title="Pump Pressure")
         self.pressure_plot.setLabel("left", "Pressure", units="bar")
         self.pressure_plot.setLabel("bottom", "Time", units="min")
         self.pressure_plot.showGrid(x=True, y=True, alpha=0.3)
-        self.pressure_curve_pump1 = self.pressure_plot.plot([], [], pen=pg.mkPen(color="#0072B2", width=2), name="Pump 1")
-        self.pressure_curve_pump2 = self.pressure_plot.plot([], [], pen=pg.mkPen(color="#E69F00", width=2), name="Pump 2")
-        self.pressure_plot.addLegend()
+        self.pressure_curves = {}  # Dict of {pump_name: curve}, populated by set_configuration()
         self.layout.addWidget(self.pressure_plot, 0, 1)
 
-        # Flowrate plot
+        # Flowrate plot - pump curves will be added after set_configuration()
         self.flowrate_plot = pg.PlotWidget(title="Pump Flowrate")
         self.flowrate_plot.setLabel("left", "Flow Rate", units="mL/min")
         self.flowrate_plot.setLabel("bottom", "Time", units="min")
         self.flowrate_plot.showGrid(x=True, y=True, alpha=0.3)
-        self.flow_curve_pump1 = self.flowrate_plot.plot([], [], pen=pg.mkPen(color="#0072B2", width=2), name="Pump 1")
-        self.flow_curve_pump2 = self.flowrate_plot.plot([], [], pen=pg.mkPen(color="#E69F00", width=2), name="Pump 2")
-        self.flow_curve_cumulative = self.flowrate_plot.plot([], [], pen=pg.mkPen(color="#009E73", width=2, style=QtCore.Qt.DashLine), name="Cumulative")
-        self.flowrate_plot.addLegend()
+        self.flow_curves = {}  # Dict of {pump_name: curve}, populated by set_configuration()
+        self.flow_curve_cumulative = None  # Initialized by set_configuration()
         self.layout.addWidget(self.flowrate_plot, 1, 0)
 
         # Add controls in bottom-right
@@ -125,6 +119,66 @@ class PlatformMonitor(QtWidgets.QWidget):
             return controller.pump_widgets
         return []
 
+    def _setup_pump_plots(self):
+        """Create/recreate pump-specific plot curves based on current pump_names."""
+        colors = ["#0072B2", "#E69F00", "#009E73", "#D55E00", "#CC79A7", "#F0E442"]
+        
+        # Clear old curves from plots
+        for curve in self.pressure_curves.values():
+            self.pressure_plot.removeItem(curve)
+        for curve in self.flow_curves.values():
+            self.flowrate_plot.removeItem(curve)
+        if self.flow_curve_cumulative is not None:
+            self.flowrate_plot.removeItem(self.flow_curve_cumulative)
+        
+        self.pressure_curves.clear()
+        self.flow_curves.clear()
+        
+        # Create new curves for each pump
+        for i, pump_name in enumerate(self.pump_names):
+            color = colors[i % len(colors)]
+            self.pressure_curves[pump_name] = self.pressure_plot.plot([], [], pen=pg.mkPen(color=color, width=2), name=pump_name)
+            self.flow_curves[pump_name] = self.flowrate_plot.plot([], [], pen=pg.mkPen(color=color, width=2), name=pump_name)
+        
+        # Add cumulative flow curve
+        self.flow_curve_cumulative = self.flowrate_plot.plot([], [], pen=pg.mkPen(color="#000000", width=2, style=QtCore.Qt.DashLine), name="Cumulative")
+        
+        # Add legends if there are pumps
+        if self.pump_names:
+            self.pressure_plot.addLegend()
+            self.flowrate_plot.addLegend()
+
+    def set_configuration(self):
+        """Load pump configuration from Platform Control and initialize plots."""
+        self.pump_widgets = self._get_platform_pumps()
+        
+        if not self.pump_widgets:
+            QtWidgets.QMessageBox.warning(self, "No Pumps", "No pumps configured in Platform Control.")
+            return
+        
+        # Extract pump names and initialize correction factors
+        self.pump_names = [pw.nameEdit.text().strip() or f"Pump_{i}" for i, pw in enumerate(self.pump_widgets)]
+        self.correction_factors = {name: 1.0 for name in self.pump_names}
+        
+        # Recreate plot curves
+        self._setup_pump_plots()
+        
+        # Clear buffers and reinitialize for new pump set
+        self._time_series = []
+        self._temp_series_value = []
+        self._pump_flow_series = {name: [] for name in self.pump_names}
+        self._pump_pressure_series = {name: [] for name in self.pump_names}
+        self._flow_cumulative_value = []
+        
+        # Log to console and show confirmation
+        pump_list = ", ".join(self.pump_names)
+        print(f"[Platform Monitor] Configured {len(self.pump_names)} pump(s): {pump_list}")
+        QtWidgets.QMessageBox.information(
+            self, 
+            "Configuration Updated", 
+            f"Configured {len(self.pump_names)} pump(s):\n{pump_list}"
+        )
+
     ##### Temperature relies on furnace thermocouple
     def safe_read_temp(self):
         """Read temperature with retry logic to avoid transient Modbus failures."""
@@ -160,8 +214,15 @@ class PlatformMonitor(QtWidgets.QWidget):
 
 
 
-    def _update_plot(self, now, temp, pressure_pump1, pressure_pump2, flow_pump1, flow_pump2):
-        """Append latest values to buffers and refresh all plot curves."""
+    def _update_plot(self, now, temp, pump_flows, pump_pressures):
+        """Append latest values to buffers and refresh all plot curves.
+        
+        Args:
+            now: datetime object of measurement time
+            temp: temperature value
+            pump_flows: dict {pump_name: flow_value}
+            pump_pressures: dict {pump_name: pressure_value}
+        """
         elapsed_time = (now - self.start_time_int).total_seconds() / 60.0
         
         # Append new sample to the shared time axis and temperature series.
@@ -172,27 +233,33 @@ class PlatformMonitor(QtWidgets.QWidget):
         if len(self._time_series) > self._max_points:
             self._time_series = self._time_series[-self._max_points:]
             self._temp_series_value = self._temp_series_value[-self._max_points:]
-            self._pressure_pump1_value = self._pressure_pump1_value[-self._max_points:]
-            self._pressure_pump2_value = self._pressure_pump2_value[-self._max_points:]
-            self._flow_pump1_value = self._flow_pump1_value[-self._max_points:]
-            self._flow_pump2_value = self._flow_pump2_value[-self._max_points:]
+            for pump_name in self.pump_names:
+                self._pump_flow_series[pump_name] = self._pump_flow_series[pump_name][-self._max_points:]
+                self._pump_pressure_series[pump_name] = self._pump_pressure_series[pump_name][-self._max_points:]
             self._flow_cumulative_value = self._flow_cumulative_value[-self._max_points:]
+        
         self.temp_curve.setData(self._time_series, self._temp_series_value)
         
-        # Pressure series (one per pump) plotted against shared time axis.
-        self._pressure_pump1_value.append(pressure_pump1)
-        self._pressure_pump2_value.append(pressure_pump2)
-        self.pressure_curve_pump1.setData(self._time_series, self._pressure_pump1_value)
-        self.pressure_curve_pump2.setData(self._time_series, self._pressure_pump2_value)
+        # Append pressure and flow for each pump.
+        cumulative_flow = 0.0
+        for pump_name in self.pump_names:
+            pressure_val = pump_pressures.get(pump_name, float('NaN'))
+            flow_val = pump_flows.get(pump_name, float('NaN'))
+            
+            self._pump_pressure_series[pump_name].append(pressure_val)
+            self.pressure_curves[pump_name].setData(self._time_series, self._pump_pressure_series[pump_name])
+            
+            # Apply correction factor to flow for display
+            corrected_flow = flow_val * self.correction_factors[pump_name] if not math.isnan(flow_val) else float('NaN')
+            self._pump_flow_series[pump_name].append(corrected_flow)
+            self.flow_curves[pump_name].setData(self._time_series, self._pump_flow_series[pump_name])
+            
+            if not math.isnan(flow_val):
+                cumulative_flow += flow_val
         
-        # Flow series and cumulative flow, all against shared time axis.
-        cumulative_flow = flow_pump1 + flow_pump2   
-        self._flow_pump1_value.append(flow_pump1*self.pump1_correction_factor_x_value)
-        self._flow_pump2_value.append(flow_pump2*self.pump2_correction_factor_x_value)
         self._flow_cumulative_value.append(cumulative_flow)
-        self.flow_curve_pump1.setData(self._time_series, self._flow_pump1_value)
-        self.flow_curve_pump2.setData(self._time_series, self._flow_pump2_value)
-        self.flow_curve_cumulative.setData(self._time_series, self._flow_cumulative_value)
+        if self.flow_curve_cumulative is not None:
+            self.flow_curve_cumulative.setData(self._time_series, self._flow_cumulative_value)
 
     def export_data(self):
         """Export accumulated in-memory log data to a user-selected CSV file."""
@@ -223,9 +290,8 @@ class PlatformMonitor(QtWidgets.QWidget):
 
 
 
-    def continuous_log_function(self,event=None):
-        """Periodic acquisition + plot update + append to experiment log CSV."""
-
+    def continuous_log_function(self, event=None):
+        """Periodic acquisition + plot update + append to experiment log CSV for all configured pumps."""
         # set up directory and filename for logging - creates new file for each run with timestamp in name, stored in Experimental_logs folder.
         log_dir = "Experimental_logs"
         if not os.path.isdir(log_dir):
@@ -237,77 +303,65 @@ class PlatformMonitor(QtWidgets.QWidget):
         now = datetime.datetime.now()
         elapsed_time = (now - self.start_time_int).total_seconds() / 60.0
         
-        # Get configured pumps from Platform Control instead of using hardcoded pump1/pump2.
-        pump_widgets = self._get_platform_pumps()
+        # Read flow and pressure from all configured pumps.
+        pump_flows = {}  # {pump_name: flow_value}
+        pump_pressures = {}  # {pump_name: pressure_value}
         
-        # Read flow and pressure from first two pumps (or use NaN if not available).
-        flow_pump1 = float('NaN')
-        pressure_pump1 = float('NaN')
-        flow_pump2 = float('NaN')
-        pressure_pump2 = float('NaN')
-        
-        if len(pump_widgets) > 0:
-            try:
-                flow_result = pump_widgets[0].read_flow()
-                flow_pump1 = float(flow_result or 0.0)
-            except Exception as e:
-                print(f"[Warning] Failed to read flow from pump 0: {type(e).__name__}: {e}")
-                flow_pump1 = float('NaN')
+        for i, pump_widget in enumerate(self.pump_widgets):
+            pump_name = self.pump_names[i]
             
+            # Read flow
             try:
-                pressure_pump1 = float(pump_widgets[0].read_pressure()) if hasattr(pump_widgets[0], 'read_pressure') else 0.0
+                flow_result = pump_widget.read_flow()
+                pump_flows[pump_name] = float(flow_result or 0.0)
             except Exception as e:
-                print(f"[Warning] Failed to read pressure from pump 0: {type(e).__name__}: {e}")
-                pressure_pump1 = float('NaN')
-        
-        if len(pump_widgets) > 1:
-            try:
-                flow_result = pump_widgets[1].read_flow()
-                flow_pump2 = float(flow_result or 0.0)
-            except Exception as e:
-                print(f"[Warning] Failed to read flow from pump 1: {type(e).__name__}: {e}")
-                flow_pump2 = float('NaN')
+                print(f"[Warning] Failed to read flow from {pump_name}: {type(e).__name__}: {e}")
+                pump_flows[pump_name] = float('NaN')
             
+            # Read pressure
             try:
-                pressure_pump2 = float(pump_widgets[1].read_pressure()) if hasattr(pump_widgets[1], 'read_pressure') else 0.0
+                if hasattr(pump_widget, 'read_pressure'):
+                    pump_pressures[pump_name] = float(pump_widget.read_pressure())
+                else:
+                    pump_pressures[pump_name] = 0.0
             except Exception as e:
-                print(f"[Warning] Failed to read pressure from pump 1: {type(e).__name__}: {e}")
-                pressure_pump2 = float('NaN')
+                print(f"[Warning] Failed to read pressure from {pump_name}: {type(e).__name__}: {e}")
+                pump_pressures[pump_name] = float('NaN')
 
-        self._update_plot(now, temp, pressure_pump1, pressure_pump2, flow_pump1, flow_pump2)
+        self._update_plot(now, temp, pump_flows, pump_pressures)
         
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # Only apply correction factors to valid (non-NaN) flow values.
-        try:
-            corrected_flow_a = flow_pump1 * self.pump1_correction_factor_x_value if not math.isnan(flow_pump1) else float('NaN')
-        except (TypeError, ValueError):
-            corrected_flow_a = float('NaN')
-        
-        try:
-            corrected_flow_b = flow_pump2 * self.pump2_correction_factor_x_value if not math.isnan(flow_pump2) else float('NaN')
-        except (TypeError, ValueError):
-            corrected_flow_b = float('NaN')
-        
-        try:
-            cumulative_flow = corrected_flow_a + corrected_flow_b if (not math.isnan(corrected_flow_a) and not math.isnan(corrected_flow_b)) else float('NaN')
-        except (TypeError, ValueError):
-            cumulative_flow = float('NaN')
+        # Apply correction factors and build CSV row data.
+        corrected_flows = {}
+        cumulative_flow = 0.0
+        for pump_name in self.pump_names:
+            flow_val = pump_flows.get(pump_name, float('NaN'))
+            try:
+                corrected = flow_val * self.correction_factors[pump_name] if not math.isnan(flow_val) else float('NaN')
+            except (TypeError, ValueError):
+                corrected = float('NaN')
+            corrected_flows[pump_name] = corrected
+            if not math.isnan(corrected):
+                cumulative_flow += corrected
 
-        # Build one-row dataframe entry for this logging tick.
-        df_entry = pd.DataFrame([{
+        # Build one-row dataframe entry with dynamic pump columns.
+        row_data = {
             "Time": timestamp,
             "Elapsed Time": round(elapsed_time, 2),
             "Temperature": temp,
-            "Step": getattr(self,"_sequence_index",None),
-            "Flow_A": corrected_flow_a,
-            "Flow_B": corrected_flow_b,
+            "Step": getattr(self, "_sequence_index", None),
             "Cumulative Flow": cumulative_flow,
-            "Pressure_A": pressure_pump1,
-            "Pressure_B": pressure_pump2,
             "Event": event,
-            "residence_time": None # placeholder for residence time calculation - implement as needed
-        }])
+            "residence_time": None
+        }
+        
+        # Add flow and pressure columns for each pump.
+        for pump_name in self.pump_names:
+            row_data[f"Flow_{pump_name}"] = corrected_flows[pump_name]
+            row_data[f"Pressure_{pump_name}"] = pump_pressures.get(pump_name, float('NaN'))
+        
+        df_entry = pd.DataFrame([row_data])
 
         # Check if file exists to decide on header
         file_exists = os.path.isfile(log_path)
@@ -315,7 +369,7 @@ class PlatformMonitor(QtWidgets.QWidget):
         # Append to CSV - creates new file with header if it doesn't exist, otherwise appends without header.
         df_entry.to_csv(log_path, mode='a', index=False, header=not file_exists)
 
-        # 6. Update In-Memory DataFrame for the 'Export' button
+        # Update In-Memory DataFrame for the 'Export' button
         if not hasattr(self, '_log_dataframe') or self._log_dataframe is None:
             self._log_dataframe = df_entry
         else:
