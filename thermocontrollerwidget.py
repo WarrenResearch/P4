@@ -222,3 +222,8 @@ class ThermocontrollerControl(QtWidgets.QWidget):
             print(f'Error reading temperature: {str(e)}')
             self.currentTempDisplay.setText("--")
 
+
+    def safetyShutdown(self):
+        if self.thermocontrollerObj and self.thermocontrollerObj.indicated() > 150:
+            self.thermocontrollerObj.setpoint_1(20)
+            print("Safety shutdown activated: temperature exceeded 150°C, setpoint set to 20°C")
