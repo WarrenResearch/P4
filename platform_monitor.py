@@ -179,19 +179,27 @@ class PlatformMonitor(QtWidgets.QWidget):
             QtWidgets.QMessageBox.warning(self, "No Data", "No data to export yet.")
             return
         
-        file_path, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self,
-            "Export Platform Data",
-            f"experiment_data_{self.start_time_str}.csv",
-            "CSV Files (*.csv)"
-        )
+
+        # testing 
+      
+
+        #  file_path, _ = QtWidgets.QFileDialog.getSaveFileName( '''uncoment after testing'''
+            #self,
+            #"Export Platform Data",
+            #f"experiment_data_{self.start_time_str}.csv",
+            #"CSV Files (*.csv)"
+            #)
         
-        if file_path:
-            try:
-                self._log_dataframe.to_csv(file_path, index=False)
-                QtWidgets.QMessageBox.information(self, "Success", f"Data exported to {file_path}")
-            except Exception as e:
-                QtWidgets.QMessageBox.critical(self, "Error", f"Failed to export: {str(e)}")
+        #if file_path:
+            #try:
+                #self._log_dataframe.to_csv(file_path, index=False)
+                #QtWidgets.QMessageBox.information(self, "Success", f"Data exported to {file_path}")
+            #except Exception as e:
+                #QtWidgets.QMessageBox.critical(self, "Error", f"Failed to export: {str(e)}")
+
+
+
+    
 
 
     def continuous_log_function(self,event=None):

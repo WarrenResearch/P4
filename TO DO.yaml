@@ -9,4 +9,5 @@ TAB for DOE - adapt the existing DOE code to fit into the new architecture
 
 plot the pressure and flow rate for a pump (if available) automatically 
   - if more than one pump, plot all of them and label them accordingly
-
+  - if no pump, dont plot 
+  - add export functionality for this data as well, similar to the GPC data export
