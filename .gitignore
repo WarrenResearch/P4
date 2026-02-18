@@ -38,6 +38,6 @@ Thumbs.db
 *.tmp
 *.bak
 
-.xls
-.xlsx
-.csv
+*.xls
+*.xlsx
+*.csv
