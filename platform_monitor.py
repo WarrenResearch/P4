@@ -357,8 +357,6 @@ class PlatformMonitor(QtWidgets.QWidget):
             "Cumulative Flow": cumulative_flow,
             "Event": event,
             "residence_time": None
-            #missing pressure ?
-            
         }
         
         # Add flow and pressure columns for each pump.
