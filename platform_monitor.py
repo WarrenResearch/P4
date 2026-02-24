@@ -307,7 +307,7 @@ class PlatformMonitor(QtWidgets.QWidget):
         pump_flows = {}  # {pump_name: flow_value}
         pump_pressures = {}  # {pump_name: pressure_value}
         
-        for i, pump_widget in enumerate(self.pump_widgets):
+        for i, pump_widget in enumerate(self.pump_widgets): # goes through each pump widget in the platform control tab, reads flow and pressure, and stores in dicts with pump names as keys. Uses try-except to handle read errors gracefully.
             pump_name = self.pump_names[i]
             
             # Read flow
@@ -319,11 +319,13 @@ class PlatformMonitor(QtWidgets.QWidget):
                 pump_flows[pump_name] = float('NaN')
             
             # Read pressure
+            print(f"Methods inside {pump_name}:")
+            for method in dir(pump_widget):
+                if "press" in method.lower() or "read" in method.lower():
+                    print(f" -> Found: {method}")
             try:
-                if hasattr(pump_widget, 'read_pressure'):
-                    pump_pressures[pump_name] = float(pump_widget.read_pressure())
-                else:
-                    pump_pressures[pump_name] = 0.0
+                pressure_result = pump_widget.read_pressure()
+                pump_pressures[pump_name] = float(pressure_result or 0.0)
             except Exception as e:
                 print(f"[Warning] Failed to read pressure from {pump_name}: {type(e).__name__}: {e}")
                 pump_pressures[pump_name] = float('NaN')
@@ -333,12 +335,14 @@ class PlatformMonitor(QtWidgets.QWidget):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         # Apply correction factors and build CSV row data.
-        corrected_flows = {}
-        cumulative_flow = 0.0
-        for pump_name in self.pump_names:
+        corrected_flows = {} # create dict to hold corrected flow values for each pump - 
+        # either add a correction factor to each pump manually or add it within GUI - probably best for correction here manually (less work)
+        cumulative_flow = 0.0 # initial value for total flow across all pumps, is updated in the loop below and stored in the CSV for each timepoint to track cumulative flow over time.
+        
+        for pump_name in self.pump_names: # flow loop over pump variables in pump_names list
             flow_val = pump_flows.get(pump_name, float('NaN'))
             try:
-                corrected = flow_val * self.correction_factors[pump_name] if not math.isnan(flow_val) else float('NaN')
+                corrected = flow_val * self.correction_factors[pump_name] if not math.isnan(flow_val) else float('NaN') # apply correction factor to raw flow value, if flow_val is NaN then corrected is also set to NaN to avoid propagating invalid data through calculations and plots.
             except (TypeError, ValueError):
                 corrected = float('NaN')
             corrected_flows[pump_name] = corrected
@@ -350,11 +354,11 @@ class PlatformMonitor(QtWidgets.QWidget):
             "Time": timestamp,
             "Elapsed Time": round(elapsed_time, 2),
             "Temperature": temp,
-            "Step": getattr(self, "_sequence_index", None),
             "Cumulative Flow": cumulative_flow,
             "Event": event,
             "residence_time": None
             #missing pressure ?
+            
         }
         
         # Add flow and pressure columns for each pump.
@@ -364,9 +368,34 @@ class PlatformMonitor(QtWidgets.QWidget):
         
         df_entry = pd.DataFrame([row_data])
 
-        # Check if file exists to decide on header
+        # Check if file exists and ensure schema can grow when pumps are initialized later.
         file_exists = os.path.isfile(log_path)
-    
+        if file_exists:
+            try:
+                existing_columns = list(pd.read_csv(log_path, nrows=0).columns)
+            except Exception as e:
+                print(f"[Warning] Could not read existing log header: {type(e).__name__}: {e}")
+                existing_columns = []
+
+            if existing_columns:
+                target_columns = existing_columns + [col for col in df_entry.columns if col not in existing_columns]
+
+                # If new columns appear (e.g., Flow_/Pressure_ after set_configuration),
+                # rewrite existing file with expanded header so new data is visible in CSV.
+                if target_columns != existing_columns:
+                    try:
+                        existing_df = pd.read_csv(log_path)
+                        for col in target_columns:
+                            if col not in existing_df.columns:
+                                existing_df[col] = pd.NA
+                        existing_df = existing_df.reindex(columns=target_columns)
+                        existing_df.to_csv(log_path, index=False)
+                        print(f"[Platform Monitor] Log schema expanded with new columns: {', '.join([c for c in target_columns if c not in existing_columns])}")
+                    except Exception as e:
+                        print(f"[Warning] Failed to expand log schema: {type(e).__name__}: {e}")
+
+                df_entry = df_entry.reindex(columns=target_columns)
+
         # Append to CSV - creates new file with header if it doesn't exist, otherwise appends without header.
         df_entry.to_csv(log_path, mode='a', index=False, header=not file_exists)
 

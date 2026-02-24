@@ -363,7 +363,7 @@ class PumpControl(QtWidgets.QWidget):
             print('No model selected')
 
     def read_flow(self):
-        """Read current flow rate from pump. Returns flow in mL/min or 0.0 if not available."""
+        """Read current flow rate from pump. Returns flow in mL/min or 0.0 if not available - designed for jasco - will need to add individual pump code yourself if needed."""
         pumpModel = self.pumpModelCombo.currentText()
         try:
             if pumpModel == "Jasco PU2080":
@@ -391,5 +391,19 @@ class PumpControl(QtWidgets.QWidget):
                 return 0.0
         except Exception as e:
             print(f"Error reading flow from {pumpModel}: {e}")
+            return 0.0
+        
+
+    def read_pressure(self):
+        """Read current pressure from pump. Returns pressure in bar or 0.0 if not available - designed for jasco - will need to add individual pump code yourself if needed."""
+        pumpModel = self.pumpModelCombo.currentText()
+        try:
+            if pumpModel == "Jasco PU2080":
+                result = self.pumpObj.read_pressure()
+                return result
+            else:
+                return 0.0
+        except Exception as e:
+            print(f"Error reading pressure from {pumpModel}: {e}")
             return 0.0
         
