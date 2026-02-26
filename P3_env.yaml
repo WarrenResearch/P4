@@ -4,13 +4,14 @@ channels:
   - defaults
 dependencies:
   - python=3.9
+  - pip=23.3.1
   # Core Library
   - numpy=2.0.1
   - pandas=2.3.3
   - matplotlib=3.9.2
   - bottleneck=1.4.2
   - numexpr=2.10.1
-
+  - scipy=1.12.3
   
   # GUI & Viz
   - pyqt=5.15.10
@@ -24,4 +25,5 @@ dependencies:
   - tornado=6.5.1
   - pytz=2025.2
   - python-dateutil=2.9.0
-  - doepy=0.0.1
+  - pip:
+      - doepy==0.0.1
