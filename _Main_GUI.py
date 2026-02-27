@@ -71,6 +71,7 @@ class mainWindow(QtWidgets.QMainWindow):
         self.tab_main.addTab(self.tab_3, "GPC calibration")
         self.tab_main.addTab(self.tab_4, "GPC analysis runner")
         self.tab_main.addTab(self.tab_5, "Platform Monitor")
+        self.tab_main.addTab(self.tab_5, "DoE builder")
 
 
 
