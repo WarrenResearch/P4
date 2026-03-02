@@ -319,10 +319,6 @@ class PlatformMonitor(QtWidgets.QWidget):
                 pump_flows[pump_name] = float('NaN')
             
             # Read pressure
-            print(f"Methods inside {pump_name}:")
-            for method in dir(pump_widget):
-                if "press" in method.lower() or "read" in method.lower():
-                    print(f" -> Found: {method}")
             try:
                 pressure_result = pump_widget.read_pressure()
                 pump_pressures[pump_name] = float(pressure_result or 0.0)

@@ -3,13 +3,18 @@
     {
       "name": "Pump 1",
       "model": "Jasco PU2080",
-      "com_port": "COM4"
+      "com_port": "COM8"
+    },
+    {
+      "name": "Pump 2",
+      "model": "Jasco PU2080",
+      "com_port": "COM9"
     }
   ],
   "valves": [],
   "thermocontroller": {
     "name": "Eurotherm 3216",
-    "com_port": "COM4",
+    "com_port": "COM7",
     "target_temp": ""
   }
 }
