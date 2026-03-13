@@ -1,13 +1,15 @@
 TO MAKE
 
-Tab for in-situ measurments and tracking 
- - fit this into the existing export architecture for the GPC data 
 
 Plot UV chromatogram 
 
 TAB for DOE - adapt the existing DOE code to fit into the new architecture 
 
-plot the pressure and flow rate for a pump (if available) automatically 
-  - if more than one pump, plot all of them and label them accordingly
-  - if no pump, dont plot 
-  - add export functionality for this data as well, similar to the GPC data export
+
+ADD ONS 
+
+Handshake/ping for all eqipment - ensures correct communication before any processes start 
+
+UV off by an order of magnitude
+
+
