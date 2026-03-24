@@ -16,6 +16,10 @@ class PlatformControl(QtWidgets.QWidget):
         self.main = main
         self._layout = QtWidgets.QGridLayout()
         self.setLayout(self._layout)
+        self._layout.setColumnStretch(0, 1)
+        self._layout.setColumnStretch(1, 1)
+        self._layout.setRowStretch(0, 1)
+        self._layout.setRowStretch(1, 1)
         self.pumpsTuple = ("Teledyne", "MilliGAT LF", "MilliGAT HF", "Chemyx Nexus 4000", "Chemyx Fusion 6000X", "Chemyx Fusion 4000X", "Jasco PU2080")
         self.valvesTuple = ("BioChem 8way selection", "BioChem 6way selection", "BioChem 6way switching", "Rheodyne 2pos switching", "Vici 2pos switching")
 
@@ -79,17 +83,51 @@ class PlatformControl(QtWidgets.QWidget):
         self.thermocontrollerBoxLayout = QtWidgets.QVBoxLayout(self.thermocontrollerBox)
         self.thermocontroller = tcw.ThermocontrollerControl(self)
         self.thermocontrollerBoxLayout.addWidget(self.thermocontroller)
-        self._layout.addWidget(self.thermocontrollerBox, 0, 1, 2, 1, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
+        self._layout.addWidget(self.thermocontrollerBox, 0, 1, 1, 1, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
+
+    ######################################## Sequence targets ########################################
+        self.sequenceTargetsBox = QtWidgets.QGroupBox("Reactor Sequence")
+        self.sequenceTargetsBox.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self.sequenceTargetsBoxLayout = QtWidgets.QVBoxLayout(self.sequenceTargetsBox)
+        self._layout.addWidget(self.sequenceTargetsBox, 1, 1)
+
+        self.targetsTable = QtWidgets.QTableWidget(0, 2)
+        self.targetsTable.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.targetsTable.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.targetsTable.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
+        self.sequenceTargetsBoxLayout.addWidget(self.targetsTable)
+
+        self.tableButtonsLayout = QtWidgets.QHBoxLayout()
+        self.addRowButton = QtWidgets.QPushButton("Add row")
+        self.removeRowButton = QtWidgets.QPushButton("Remove row")
+        self.moveUpRowButton = QtWidgets.QPushButton("Move up")
+        self.moveDownRowButton = QtWidgets.QPushButton("Move down")
+        self.tableButtonsLayout.addWidget(self.addRowButton)
+        self.tableButtonsLayout.addWidget(self.removeRowButton)
+        self.tableButtonsLayout.addWidget(self.moveUpRowButton)
+        self.tableButtonsLayout.addWidget(self.moveDownRowButton)
+        self.tableButtonsLayout.addStretch(1)
+        self.sequenceTargetsBoxLayout.addLayout(self.tableButtonsLayout)
+
+        self.addRowButton.clicked.connect(self.add_row)
+        self.removeRowButton.clicked.connect(self.remove_selected_rows)
+        self.moveUpRowButton.clicked.connect(lambda: self.move_selected_row(-1))
+        self.moveDownRowButton.clicked.connect(lambda: self.move_selected_row(1))
+        self.refresh_target_columns()
 
     def add_pump(self):
         self.pump_count += 1
         pump_widget = pw.PumpControl(self, pumpName=f"Pump {self.pump_count}")
         self.pump_widgets.append(pump_widget)
+        if not hasattr(pump_widget, "_sequence_name_sync_connected"):
+            pump_widget.nameEdit.textChanged.connect(self.refresh_target_columns)
+            pump_widget._sequence_name_sync_connected = True
 
         row = (self.pump_count - 1) // self.pump_columns
         column = (self.pump_count - 1) % self.pump_columns
         self.pumpsLayout.addWidget(pump_widget, row, column, QtCore.Qt.AlignLeft)
         setattr(self, f"pump{self.pump_count}", pump_widget)
+        self.refresh_target_columns()
 
     def add_valve(self):
         self.valve_count += 1
@@ -113,6 +151,83 @@ class PlatformControl(QtWidgets.QWidget):
         self.valve_widgets = []
         self.pump_count = 0
         self.valve_count = 0
+        self.refresh_target_columns()
+
+    def _get_table_headers(self):
+        headers = []
+
+        for index, pump_widget in enumerate(self.pump_widgets, start=1):
+            pump_name = pump_widget.nameEdit.text().strip()
+            if not pump_name:
+                pump_name = f"Pump {index}"
+            headers.append(f"{pump_name} target flowrate [mL/min]")
+
+        if not headers:
+            headers.append("Target flowrate (pump) [mL/min]")
+
+        headers.append("Temperature [°C]")
+        return headers
+
+    def refresh_target_columns(self):
+        old_headers = []
+        for col in range(self.targetsTable.columnCount()):
+            header_item = self.targetsTable.horizontalHeaderItem(col)
+            old_headers.append(header_item.text() if header_item else f"Column {col}")
+
+        old_data = []
+        for row in range(self.targetsTable.rowCount()):
+            row_data = {}
+            for col, header in enumerate(old_headers):
+                item = self.targetsTable.item(row, col)
+                row_data[header] = item.text() if item else ""
+            old_data.append(row_data)
+
+        new_headers = self._get_table_headers()
+        self.targetsTable.setColumnCount(len(new_headers))
+        self.targetsTable.setHorizontalHeaderLabels(new_headers)
+
+        for row in range(self.targetsTable.rowCount()):
+            row_values = old_data[row] if row < len(old_data) else {}
+            for col, header in enumerate(new_headers):
+                value = row_values.get(header, "")
+                self.targetsTable.setItem(row, col, QtWidgets.QTableWidgetItem(value))
+
+    def add_row(self):
+        row_index = self.targetsTable.rowCount()
+        self.targetsTable.insertRow(row_index)
+        for column_index in range(self.targetsTable.columnCount()):
+            self.targetsTable.setItem(row_index, column_index, QtWidgets.QTableWidgetItem(""))
+
+    def remove_selected_rows(self):
+        selected_rows = sorted({index.row() for index in self.targetsTable.selectedIndexes()}, reverse=True)
+        for row in selected_rows:
+            self.targetsTable.removeRow(row)
+
+    def move_selected_row(self, direction):
+        selected_rows = sorted({index.row() for index in self.targetsTable.selectedIndexes()})
+        if not selected_rows:
+            return
+
+        current_row = selected_rows[0]
+        target_row = current_row + direction
+
+        if target_row < 0 or target_row >= self.targetsTable.rowCount():
+            return
+
+        current_values = []
+        target_values = []
+        for col in range(self.targetsTable.columnCount()):
+            current_item = self.targetsTable.item(current_row, col)
+            target_item = self.targetsTable.item(target_row, col)
+            current_values.append(current_item.text() if current_item else "")
+            target_values.append(target_item.text() if target_item else "")
+
+        for col, value in enumerate(target_values):
+            self.targetsTable.setItem(current_row, col, QtWidgets.QTableWidgetItem(value))
+        for col, value in enumerate(current_values):
+            self.targetsTable.setItem(target_row, col, QtWidgets.QTableWidgetItem(value))
+
+        self.targetsTable.selectRow(target_row)
 
     def _platform_file_path(self):
         return os.path.join(os.path.dirname(__file__), "platform_layout.json")
