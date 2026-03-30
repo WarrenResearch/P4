@@ -64,18 +64,12 @@ class mainWindow(QtWidgets.QMainWindow):
         self.platform_monitor = platform_monitor.PlatformMonitor(self, main=self)
         tab_5.addWidget(self.platform_monitor)
 
-        self.tab_6 = QtWidgets.QTabWidget()
-        tab_6 = QtWidgets.QGridLayout(self.tab_6)
-        self.doe_builder = DoE_builder.DoE_builder(self, main=self)
-        tab_6.addWidget(self.doe_builder)
-
         ####### Add tabs and titles to the master tab widget #######
         self.tab_main.addTab(self.tab_1, "Method builder")
         self.tab_main.addTab(self.tab_2, "Platform control")
         self.tab_main.addTab(self.tab_3, "GPC calibration")
         self.tab_main.addTab(self.tab_4, "GPC analysis runner")
         self.tab_main.addTab(self.tab_5, "Platform Monitor")
-        self.tab_main.addTab(self.tab_6, "DoE builder")
 
 
 
