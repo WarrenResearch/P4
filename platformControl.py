@@ -134,11 +134,11 @@ class PlatformControl(QtWidgets.QWidget):
         
 
         self.fractioncollectorBoxLayout.addWidget(self.fractionConnectButton)
+        self.fractioncollectorBoxLayout.addWidget(self.fractionDisconnectButton)
         self.fractioncollectorBoxLayout.addWidget(self.fractionMovePositionLabel)
         self.fractioncollectorBoxLayout.addWidget(self.fractionMovePositionText)
         self.fractioncollectorBoxLayout.addWidget(self.fractionMoveButton)
         self.fractioncollectorBoxLayout.addWidget(self.fractionResetButton)
-        self.fractioncollectorBoxLayout.addWidget(self.fractionDisconnectButton)
         self.fractioncollectorBoxLayout.addWidget(self.fractionNextPositionButton)
         self.fractioncollectorBoxLayout.addStretch(1)
 
@@ -146,7 +146,7 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractionMoveButton.clicked.connect(self.move_fraction_collector)
         self.fractionResetButton.clicked.connect(self.reset_fraction_collector)
         self.fractionDisconnectButton.clicked.connect(self.disconnect_fraction_collector)
-        self.fractionMovePositionText.returnPressed.connect(self.move_fraction_collector)
+        self.fractionNextPositionButton.clicked.connect(self.move_to_next_position)
 
         self._layout.addWidget(self.fractioncollectorBox, 0, 1, 1, 1, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
 
