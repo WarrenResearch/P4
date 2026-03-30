@@ -4,6 +4,7 @@ from PyQt5 import QtWidgets, QtCore
 import pumpWidget as pw
 import valveWidget as vw
 import thermocontrollerwidget as tcw
+import fraction_driver as fd
 
 ### Class used to define all apparatus available for automated experiments ###
 
@@ -16,8 +17,10 @@ class PlatformControl(QtWidgets.QWidget):
         self.main = main
         self._layout = QtWidgets.QGridLayout()
         self.setLayout(self._layout)
+        self._layout.setHorizontalSpacing(0)
         self._layout.setColumnStretch(0, 1)
-        self._layout.setColumnStretch(1, 1)
+        self._layout.setColumnStretch(1, 0)
+        self._layout.setColumnStretch(2, 0)
         self._layout.setRowStretch(0, 1)
         self._layout.setRowStretch(1, 1)
         self.pumpsTuple = ("Teledyne", "MilliGAT LF", "MilliGAT HF", "Chemyx Nexus 4000", "Chemyx Fusion 6000X", "Chemyx Fusion 4000X", "Jasco PU2080")
@@ -83,7 +86,7 @@ class PlatformControl(QtWidgets.QWidget):
         self.thermocontrollerBoxLayout = QtWidgets.QVBoxLayout(self.thermocontrollerBox)
         self.thermocontroller = tcw.ThermocontrollerControl(self)
         self.thermocontrollerBoxLayout.addWidget(self.thermocontroller)
-        self._layout.addWidget(self.thermocontrollerBox, 0, 1, 1, 1, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
+        self._layout.addWidget(self.thermocontrollerBox, 0, 2, 1, 1, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
 
     ######################################## Sequence targets ########################################
         self.sequenceTargetsBox = QtWidgets.QGroupBox("Reactor Sequence")
@@ -114,6 +117,39 @@ class PlatformControl(QtWidgets.QWidget):
         self.moveUpRowButton.clicked.connect(lambda: self.move_selected_row(-1))
         self.moveDownRowButton.clicked.connect(lambda: self.move_selected_row(1))
         self.refresh_target_columns()
+######################################## Fraction Collector ########################################
+        self.fractioncollectorBox = QtWidgets.QGroupBox("Fraction Collector")
+        self.fractioncollectorBox.setMaximumHeight(400)
+        self.fractioncollectorBox.setMaximumWidth(300)
+        self.fractioncollectorBoxLayout = QtWidgets.QVBoxLayout(self.fractioncollectorBox)
+        self.fractioncollector = fd.AzuraFC61()
+
+        self.fractionConnectButton = QtWidgets.QPushButton("Connect Fraction Collector")
+        self.fractionDisconnectButton = QtWidgets.QPushButton("Disconnect Fraction Collector")
+        self.fractionMovePositionLabel = QtWidgets.QLabel("Move position")
+        self.fractionMovePositionText = QtWidgets.QLineEdit("A1")
+        self.fractionMoveButton = QtWidgets.QPushButton("Move to Position")
+        self.fractionResetButton = QtWidgets.QPushButton("Reset (A1)")
+        self.fractionNextPositionButton = QtWidgets.QPushButton("Move to Next Position")
+        
+
+        self.fractioncollectorBoxLayout.addWidget(self.fractionConnectButton)
+        self.fractioncollectorBoxLayout.addWidget(self.fractionMovePositionLabel)
+        self.fractioncollectorBoxLayout.addWidget(self.fractionMovePositionText)
+        self.fractioncollectorBoxLayout.addWidget(self.fractionMoveButton)
+        self.fractioncollectorBoxLayout.addWidget(self.fractionResetButton)
+        self.fractioncollectorBoxLayout.addWidget(self.fractionDisconnectButton)
+        self.fractioncollectorBoxLayout.addWidget(self.fractionNextPositionButton)
+        self.fractioncollectorBoxLayout.addStretch(1)
+
+        self.fractionConnectButton.clicked.connect(self.connect_fraction_collector)
+        self.fractionMoveButton.clicked.connect(self.move_fraction_collector)
+        self.fractionResetButton.clicked.connect(self.reset_fraction_collector)
+        self.fractionDisconnectButton.clicked.connect(self.disconnect_fraction_collector)
+        self.fractionMovePositionText.returnPressed.connect(self.move_fraction_collector)
+
+        self._layout.addWidget(self.fractioncollectorBox, 0, 1, 1, 1, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
+
 
     def add_pump(self):
         self.pump_count += 1
@@ -231,6 +267,72 @@ class PlatformControl(QtWidgets.QWidget):
 
     def _platform_file_path(self):
         return os.path.join(os.path.dirname(__file__), "platform_layout.json")
+
+    def _is_fraction_collector_connected(self):
+        return getattr(self.fractioncollector, "sock", None) is not None
+
+    def connect_fraction_collector(self):
+        try:
+            if self._is_fraction_collector_connected():
+                print("Fraction collector already connected.")
+                return
+            self.fractioncollector.connect()
+            self.fractionConnectButton.setText("Fraction Collector Connected")
+            self.fractioncollector.set_remote()
+        except Exception as error:
+            print(f"Failed to connect fraction collector: {error}")
+
+
+    def disconnect_fraction_collector(self):
+        try:
+            if not self._is_fraction_collector_connected():
+                print("Fraction collector is not connected.")
+                return
+            self.fractioncollector.disconnect()
+            self.fractionConnectButton.setText("Connect Fraction Collector")
+        except Exception as error:
+            print(f"Failed to disconnect fraction collector: {error}")
+
+
+    def move_to_next_position(self):
+        if not self._is_fraction_collector_connected():
+            print("Connect the fraction collector first.")
+            return
+
+        try:
+            self.fractioncollector.move_next()
+        except Exception as error:
+            print(f"Failed to move fraction collector to next position: {error}")
+
+    def move_fraction_collector(self):
+        position = self.fractionMovePositionText.text().strip().upper()
+        if not position:
+            print("Please enter a move position (e.g. A1).")
+            return
+
+        try:
+            # Ensure we are actually connected at the network level
+            # A quick 'REMOTE?' check is a good way to see if the pipe is still open
+            self.fractioncollector.set_remote(timeout_ms=0) 
+            
+            self.fractioncollector.move_to_vial(position)
+            print(f"Moved to {position}")
+            
+        except ConnectionError:
+            print("Connection lost. Please click Connect again.")
+            self.fractionConnectButton.setText("Connect Fraction Collector")
+            
+        except Exception as error:
+            print(f"Failed to move: {error}")
+
+            try:
+                self.fractioncollector.move_to_vial(position)
+            except Exception as error:
+                print(f"Failed to move fraction collector to {position}: {error}")
+
+    def reset_fraction_collector(self):
+        self.fractionMovePositionText.setText("A1")
+        self.move_fraction_collector()
 
     def _set_combo_text(self, combo, value):
         if not value:
