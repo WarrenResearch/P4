@@ -487,7 +487,7 @@ class PlatformControl(QtWidgets.QWidget):
         
         return current_temp == target_temp
     
-    def wash_step(self):
+    def wash_step(self, on_complete=None):
         wash_flowrate_ml_min = 1.0
         wash_volume_ml = 1.5 * float(self.reactor_volume_ml)
         wash_duration_s = (wash_volume_ml / wash_flowrate_ml_min) * 60.0
@@ -515,10 +515,13 @@ class PlatformControl(QtWidgets.QWidget):
             f"Wash step running at {wash_flowrate_ml_min} mL/min for {wash_volume_ml:.2f} mL "
             f"({wash_duration_s:.1f} s)."
         )
-        QtCore.QTimer.singleShot(wash_duration_ms, lambda pumps=active_pumps: self._finish_wash_step(pumps))
+        QtCore.QTimer.singleShot(
+            wash_duration_ms,
+            lambda pumps=active_pumps, callback=on_complete: self._finish_wash_step(pumps, callback),
+        )
         return True
 
-    def _finish_wash_step(self, active_pumps):
+    def _finish_wash_step(self, active_pumps, on_complete=None):
         for pump_widget in active_pumps:
             try:
                 pump_widget.setFlowrateText.setText('0.01')
@@ -529,6 +532,8 @@ class PlatformControl(QtWidgets.QWidget):
                 print(f"Failed to stop {pump_name} after wash step: {error}")
 
         print("Wash step complete.")
+        if callable(on_complete):
+            on_complete()
 
     def autosampler_sample(self, sample_id):
         """Trigger autosampler to take a sample and mark the sample point in platform monitor.
@@ -540,82 +545,132 @@ class PlatformControl(QtWidgets.QWidget):
         # and then communicate with the platform monitor to log the sample point with the provided sample_id.
         pass
 
-    def _check_temp_then_start_wash(self):
+    def _apply_row_flowrates(self, row_data):
+        total_flow_ml_min = 0.0
+        for pump_widget in self.pump_widgets:
+            if not hasattr(pump_widget, "pumpObj"):
+                continue
+
+            pump_name = pump_widget.nameEdit.text().strip()
+            if not pump_name:
+                continue
+
+            flow_column = f"{pump_name} [mL/min]"
+            if flow_column not in row_data:
+                continue
+
+            flow_value = row_data.get(flow_column)
+            if pd.isna(flow_value) or str(flow_value).strip() == "":
+                continue
+
+            try:
+                flow_float = float(flow_value)
+                pump_widget.setFlowrateText.setText(str(flow_float))
+                pump_widget.setFlowrate()
+                pump_widget.start()
+                total_flow_ml_min += flow_float
+            except Exception as error:
+                print(f"Failed to set row flowrate for {pump_name}: {error}")
+
+        return total_flow_ml_min
+
+    def _poll_temp_and_handle_row(self):
         current_temp_text = self.thermocontroller.currentTempDisplay.text().strip()
-        if self.temp_reached(current_temp_text):
-            print("Target temperature reached. Starting wash step.")
-            self.wash_step()
+        if not self.temp_reached(current_temp_text):
+            QtCore.QTimer.singleShot(2000, self._poll_temp_and_handle_row)
             return
 
-        # Keep polling without blocking the GUI.
-        QtCore.QTimer.singleShot(2000, self._check_temp_then_start_wash)
+        print("Target temperature reached. Starting wash step.")
+        self.wash_step(on_complete=self._on_wash_complete_for_row)
 
+    def _on_wash_complete_for_row(self):
+        row_data = getattr(self, "_active_sequence_row_data", None)
+        if not isinstance(row_data, dict):
+            print("No active sequence row found after wash step.")
+            return
 
+        total_flow_ml_min = self._apply_row_flowrates(row_data)
+        if total_flow_ml_min <= 0:
+            print("No valid flowrates in active row; advancing to next row.")
+            self._on_row_complete()
+            return
 
-    def run_sequence(self):
-        """Placeholder for method to run the sequence defined in the table."""
-        # This method would contain logic to iterate through the rows of the sequence_targets_df
-        # and send commands to the pumps, valves, and thermocontroller accordingly.
+        hold_volume_ml = 3.0 * float(self.reactor_volume_ml)
+        hold_duration_s = (hold_volume_ml / total_flow_ml_min) * 60.0
+        hold_duration_ms = int(hold_duration_s * 1000)
 
-        reactor_sequence = self.get_sequence_targets_df()
-        
-        for pump_widget in self.pump_widgets: # set flowrate to 0.01 ml min for all pumps
+        print(
+            f"Row hold started at total flow {total_flow_ml_min:.3f} mL/min for "
+            f"{hold_volume_ml:.2f} mL ({hold_duration_s:.1f} s)."
+        )
+        QtCore.QTimer.singleShot(hold_duration_ms, self._on_row_complete)
+
+    def _on_row_complete(self):
+        current_row = getattr(self, "_sequence_row_index", 0)
+        sample_id = f"row-{current_row + 1}"
+        self.autosampler_sample(sample_id)
+
+        self._sequence_row_index = current_row + 1
+        if self._sequence_row_index >= len(self._sequence_df):
+            print("Sequence complete.")
+            self._sequence_running = False
+            return
+
+        self._run_current_row()
+
+    def _run_current_row(self): # set target temp, wait for temp reached, start wash step, set flowrates, wait for 3 reactor volumes to elapse, sample, then move to next row and repeat
+        if not getattr(self, "_sequence_running", False):
+            return
+
+        if self._sequence_row_index >= len(self._sequence_df):
+            print("Sequence complete.")
+            self._sequence_running = False
+            return
+
+        row_data = self._sequence_df.iloc[self._sequence_row_index].to_dict()
+        self._active_sequence_row_data = row_data
+
+        # Set flowrate to 0.01 mL/min for all connected pumps while waiting for temperature.
+        for pump_widget in self.pump_widgets:
             if not hasattr(pump_widget, "pumpObj"):
                 continue
 
             try:
-                pump_widget.setFlowrateText.setText('0.1')
+                pump_widget.setFlowrateText.setText("0.01")
                 pump_widget.setFlowrate()
                 pump_widget.start()
             except Exception as error:
                 pump_name = pump_widget.nameEdit.text().strip() or "Unnamed pump"
                 print(f"{pump_name}: {error}")
-                
-        # set target temperature to value in next row of sequence table for thermocontroller
-        if reactor_sequence.empty:
+
+        temp_columns = [column for column in self._sequence_df.columns if "Temperature" in column]
+        next_temp = row_data.get(temp_columns[0], "") if temp_columns else ""
+        if pd.isna(next_temp) or str(next_temp).strip() == "":
+            print(f"No temperature value in reactor_sequence row {self._sequence_row_index + 1}.")
+            self._on_row_complete()
+            return
+
+        self.thermocontroller.targetTempText.setText(str(next_temp).strip())
+        self.thermocontroller.setTargetTemperature()
+        print(f"Row {self._sequence_row_index + 1}: target temperature set to {next_temp} C.")
+
+        self._poll_temp_and_handle_row()
+
+
+
+    def run_sequence(self): 
+        """Run full sequence non-blocking, row-by-row."""
+        self._sequence_df = self.get_sequence_targets_df() # extract df from table 
+        if self._sequence_df.empty:
             print("reactor_sequence is empty.")
             return False
 
-        next_index = getattr(self, "_sequence_row_index", 0)
-        if next_index >= len(reactor_sequence):
-            next_index = 0
-
-        temp_columns = [column for column in reactor_sequence.columns if "Temperature" in column]
+        temp_columns = [column for column in self._sequence_df.columns if "Temperature" in column]
         if not temp_columns:
             print("No temperature column found in reactor_sequence.")
             return False
 
-        next_temp = reactor_sequence.iloc[next_index][temp_columns[0]]
-        if pd.isna(next_temp) or str(next_temp).strip() == "":
-            print(f"No temperature value in reactor_sequence row {next_index + 1}.")
-            return False
-
-        self.thermocontroller.targetTempText.setText(str(next_temp).strip())
-        self.thermocontroller.setTargetTemperature()
-        self._sequence_row_index = next_index + 1
-
-        # once temp_reached = True, start wash step
-        self._check_temp_then_start_wash()
-
-        # set flowrate to flowrate in row of sequence table for each pump (need to match column header to pump name)
-        
-        
-        # wait for 3 reactor volumes to elapse (calculate from flowrate and reactor volume)
-        # sample using autosampler - mark sample point in platform_monitor - add a sample id function - should include sample vial, date, time 
-        # repeat for next row in table, until end of table reached
+        self._sequence_row_index = 0
+        self._sequence_running = True
+        self._run_current_row()
         return True
-
-
-
-
-
-
-
-
-# set target temperature to value in row of sequence table for thermocontroller 
-        # wait for temp_reached to return True
-        # once temp_Reached = True, start wash step 
-        # set flowrate to flowrate in row of sequence table for each pump (need to match column header to pump name), 
-        # wait for 3 reactor volumes to elapse (calculate from flowrate and reactor volume)
-        # sample using autosampler - mark sample point in platform_monitor - add a sample id function - should include sample vial, date, time 
-        # repeat for next row in table, until end of table reached
