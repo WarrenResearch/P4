@@ -77,15 +77,3 @@ class AzuraFC61:
         """Switches the collecting valve: 1 for COLLECT, 0 for WASTE[cite: 486]."""
         return self._send_command(f"COLLECT:{state}")
     
-    def sample(self, duration):
-        """
-        Collects a sample for a specified duration (in seconds).
-        If position is provided, moves to that position before collecting.
-        """
-        self.move_next(collect_mode=0)  # Move to the next position without collecting
-        time.sleep(1)  # Wait for the move to complete
-        self.set_collect(1)  # Start collecting
-        print(f"Starting sample collection for {duration} seconds.")
-        time.sleep(duration)  # Collect for the specified duration
-        self.set_collect(0)  # Stop collecting
-        print("Sample collection complete.")

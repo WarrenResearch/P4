@@ -16,7 +16,9 @@ class PlatformControl(QtWidgets.QWidget):
     def __init__(self, parent, main):
         super(PlatformControl, self).__init__(parent)
 
-        self.reactor_volume_ml = 2 # reactor volume
+        self.autosampler = fd.AzuraFC61() # initialize autosampler driver for use in sequence control methods
+
+        self.reactor_volume_ml = 5 # reactor volume
         self.fraction_delay_volume_ml = 0.5 # volume between reactor and fraction collector outlet 
 
         self.main = main
@@ -580,66 +582,84 @@ class PlatformControl(QtWidgets.QWidget):
         if callable(on_complete):
             on_complete()
 
-       
-    def _is_fraction_collector_connected(self):
-            return getattr(self.fractioncollector, "sock", None) is not None
-    
-    def _ensure_autosampler_connected(self):
-        if self.fractioncollector is None:
-            print("Autosampler is not initialized.")
-            return False
-    
-        if getattr(self.fractioncollector, "sock", None) is not None:
-            return True
-    
-        try:
-            self.fractioncollector.connect()
-            self.fractioncollector.set_remote()
-            self.fractionConnectButton.setText("Fraction Collector Connected")
-            return True
-       
-        except Exception as error:
-            print(f"Failed to connect autosampler: {error}")
-            self.fractionConnectButton.setText("Connect Fraction Collector")
-            return False
-    
 
 
-    def autosampler_sample(self, sample_id):
+
+    def autosampler_sample(self, sample_id, on_complete=None):
         """Trigger autosampler to take a sample and mark the sample point in platform monitor.
         
         Args:
             sample_id: Identifier for the sample (e.g., vial number, timestamp).
         """
-        if not self.update_sample_volume():
-            return
+        # This method would contain logic to send a command to the autosampler to take a sample,
+        # and then communicate with the platform monitor to log the sample point with the provided sample_id.
         
-        total_flow_ml_min = self._get_total_current_flowrate_ml_min()
+        if not self.update_sample_volume():
+            return False
+        
+        total_flow_ml_min = self._get_total_current_flowrate_ml_min() # get total flowrate from all pumps for 
         if total_flow_ml_min <= 0:
             QtWidgets.QMessageBox.warning(
                 self,
                 "Sample duration",
                 "Cannot calculate sample duration: total flowrate must be greater than 0 mL/min.",
             )
-            return
-
-        if not self._ensure_autosampler_connected():
-            return
+            return False
         
         self.sample_duration = (self.sample_volume / total_flow_ml_min) * 60.0
-        self.fractioncollector.sample(duration=self.sample_duration)
         print(
             f"Sample duration calculated from volume/flowrate: "
             f"{self.sample_volume:.3f} mL / {total_flow_ml_min:.3f} mL/min = {self.sample_duration:.1f} s"
         )
-        print(f"Sample taken: {sample_id}")
+
+        try:
+            self.autosampler.move_next(collect_mode=0)
+        except Exception as error:
+            print(f"Failed to move autosampler to next vial: {error}")
+            return False
+
+        QtCore.QTimer.singleShot(
+            1000,
+            lambda sid=sample_id, flow=total_flow_ml_min, callback=on_complete: self._start_autosampler_collection(sid, flow, callback),
+        )
+        return True
+
+    def _start_autosampler_collection(self, sample_id, total_flow_ml_min, on_complete=None):
+        try:
+            self.autosampler.set_collect(1)
+            print(f"Starting sample collection for {self.sample_duration:.1f} s.")
+        except Exception as error:
+            print(f"Failed to start sample collection: {error}")
+            if callable(on_complete):
+                on_complete()
+            return
+
+        duration_ms = max(0, int(self.sample_duration * 1000))
+        QtCore.QTimer.singleShot(
+            duration_ms,
+            lambda sid=sample_id, flow=total_flow_ml_min, callback=on_complete: self._finish_autosampler_collection(sid, flow, callback),
+        )
+
+    def _finish_autosampler_collection(self, sample_id, total_flow_ml_min, on_complete=None):
+        try:
+            self.autosampler.set_collect(0)
+            print(f"Sample taken: {sample_id}")
+        except Exception as error:
+            print(f"Failed to stop sample collection: {error}")
 
         if self.main is not None and hasattr(self.main, "platform_monitor"):
-            event_text = f"SAMPLE_TAKEN; id={sample_id}"
+            event_text = (
+                f"SAMPLE_TAKEN;id={sample_id};"
+                f"volume_ml={self.sample_volume:.3f};duration_s={self.sample_duration:.1f};"
+                f"flow_ml_min={total_flow_ml_min:.3f}"
+            )
             try:
                 self.main.platform_monitor.continuous_log_function(event=event_text)
             except Exception as error:
                 print(f"Failed to log sample event in platform monitor: {error}")
+
+        if callable(on_complete):
+            on_complete()
 
 
 
@@ -707,8 +727,14 @@ class PlatformControl(QtWidgets.QWidget):
     def _on_row_complete(self):
         current_row = getattr(self, "_sequence_row_index", 0)
         sample_id = f"row-{current_row + 1}"
-        self.autosampler_sample(sample_id)
+        started = self.autosampler_sample(
+            sample_id,
+            on_complete=lambda row=current_row: self._advance_sequence_after_sample(row),
+        )
+        if not started:
+            self._advance_sequence_after_sample(current_row)
 
+    def _advance_sequence_after_sample(self, current_row):
         self._sequence_row_index = current_row + 1
         if self._sequence_row_index >= len(self._sequence_df):
             print("Sequence complete.")
@@ -758,12 +784,7 @@ class PlatformControl(QtWidgets.QWidget):
 
 
     def run_sequence(self): 
-
         """Run full sequence non-blocking, row-by-row."""
-        if getattr(self, "_sequence_running", False):
-            print("Sequence already running.")
-            return False
-        
         self._sequence_df = self.get_sequence_targets_df() # extract df from table 
         if self._sequence_df.empty:
             print("reactor_sequence is empty.")
@@ -773,11 +794,8 @@ class PlatformControl(QtWidgets.QWidget):
         if not temp_columns:
             print("No temperature column found in reactor_sequence.")
             return False
-        
-        self.set_monitor_configuration() # ensure platform monitor has current pump configuration for logging during sequence run
+
         self._sequence_row_index = 0
         self._sequence_running = True
-        self._row_phase = "idle"
-        self._active_row_token = 0
         self._run_current_row()
         return True
