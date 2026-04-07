@@ -758,7 +758,12 @@ class PlatformControl(QtWidgets.QWidget):
 
 
     def run_sequence(self): 
+
         """Run full sequence non-blocking, row-by-row."""
+        if getattr(self, "_sequence_running", False):
+            print("Sequence already running.")
+            return False
+        
         self._sequence_df = self.get_sequence_targets_df() # extract df from table 
         if self._sequence_df.empty:
             print("reactor_sequence is empty.")
@@ -768,8 +773,11 @@ class PlatformControl(QtWidgets.QWidget):
         if not temp_columns:
             print("No temperature column found in reactor_sequence.")
             return False
-
+        
+        self.set_monitor_configuration() # ensure platform monitor has current pump configuration for logging during sequence run
         self._sequence_row_index = 0
         self._sequence_running = True
+        self._row_phase = "idle"
+        self._active_row_token = 0
         self._run_current_row()
         return True

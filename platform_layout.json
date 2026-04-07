@@ -3,11 +3,6 @@
     {
       "name": "Pump 1",
       "model": "Jasco PU2080",
-      "com_port": "COM8"
-    },
-    {
-      "name": "Pump 2",
-      "model": "Jasco PU2080",
       "com_port": "COM9"
     }
   ],
