@@ -16,6 +16,8 @@ class PlatformControl(QtWidgets.QWidget):
     def __init__(self, parent, main):
         super(PlatformControl, self).__init__(parent)
 
+        self.autosampler = fd.AzuraFC61() # initialize autosampler driver for use in sequence control methods
+
         self.reactor_volume_ml = 5 # reactor volume
         self.fraction_delay_volume_ml = 0.5 # volume between reactor and fraction collector outlet 
 
@@ -141,6 +143,10 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractionMoveButton = QtWidgets.QPushButton("Move to Position")
         self.fractionResetButton = QtWidgets.QPushButton("Reset (A1)")
         self.fractionNextPositionButton = QtWidgets.QPushButton("Move to Next Position")
+        self.sampleVolumeLabel = QtWidgets.QLabel("Sample Volume (ml)")
+        self.sampleVolumeText = QtWidgets.QLineEdit("1")
+        self.sample_volume = 1.0
+        self.sample_duration = 0.0
         
 
         self.fractioncollectorBoxLayout.addWidget(self.fractionConnectButton)
@@ -150,6 +156,8 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractioncollectorBoxLayout.addWidget(self.fractionMoveButton)
         self.fractioncollectorBoxLayout.addWidget(self.fractionResetButton)
         self.fractioncollectorBoxLayout.addWidget(self.fractionNextPositionButton)
+        self.fractioncollectorBoxLayout.addWidget(self.sampleVolumeLabel)
+        self.fractioncollectorBoxLayout.addWidget(self.sampleVolumeText)
         self.fractioncollectorBoxLayout.addStretch(1)
 
         self.fractionConnectButton.clicked.connect(self.connect_fraction_collector)
@@ -157,6 +165,7 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractionResetButton.clicked.connect(self.reset_fraction_collector)
         self.fractionDisconnectButton.clicked.connect(self.disconnect_fraction_collector)
         self.fractionNextPositionButton.clicked.connect(self.move_to_next_position)
+        self.sampleVolumeText.editingFinished.connect(self.update_sample_volume)
 
         self._layout.addWidget(self.fractioncollectorBox, 0, 1, 1, 1, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
 
@@ -377,6 +386,40 @@ class PlatformControl(QtWidgets.QWidget):
             combo.addItem(value)
         combo.setCurrentText(value)
 
+    def update_sample_volume(self):
+        value_text = self.sampleVolumeText.text().strip()
+        try:
+            value = float(value_text)
+            if value <= 0:
+                raise ValueError
+        except ValueError:
+            QtWidgets.QMessageBox.warning(self, "Sample volume", "Enter a positive number of milliliters.")
+            self.sampleVolumeText.setText(str(self.sample_volume))
+            return False
+
+        self.sample_volume = value
+        return True
+
+    def _get_total_current_flowrate_ml_min(self): #cycles through the pump widgets and sums the current flowrate values to calculate total flowrate in mL/min for use in sample duration calculation
+        total_flow_ml_min = 0.0
+        for pump_widget in self.pump_widgets:
+            if not hasattr(pump_widget, "setFlowrateText"):
+                continue
+
+            flow_text = pump_widget.setFlowrateText.text().strip()
+            if not flow_text:
+                continue
+
+            try:
+                flow_value = float(flow_text)
+            except ValueError:
+                continue
+
+            if flow_value > 0:
+                total_flow_ml_min += flow_value
+
+        return total_flow_ml_min
+
     def save_platform(self):
         pumps = []
         for pump_widget in self.pump_widgets:
@@ -453,6 +496,7 @@ class PlatformControl(QtWidgets.QWidget):
         if target_temp:
             self.thermocontroller.targetTempText.setText(target_temp)
 
+########### Methods for running sequences and controlling autosampler ###########
     def set_monitor_configuration(self):
         """Trigger platform monitor to load pump configuration."""
         if self.main is None or not hasattr(self.main, 'platform_monitor'):
@@ -538,6 +582,9 @@ class PlatformControl(QtWidgets.QWidget):
         if callable(on_complete):
             on_complete()
 
+
+
+
     def autosampler_sample(self, sample_id):
         """Trigger autosampler to take a sample and mark the sample point in platform monitor.
         
@@ -546,7 +593,41 @@ class PlatformControl(QtWidgets.QWidget):
         """
         # This method would contain logic to send a command to the autosampler to take a sample,
         # and then communicate with the platform monitor to log the sample point with the provided sample_id.
+        
+        if not self.update_sample_volume():
+            return
+        
+        total_flow_ml_min = self._get_total_current_flowrate_ml_min()
+        if total_flow_ml_min <= 0:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Sample duration",
+                "Cannot calculate sample duration: total flowrate must be greater than 0 mL/min.",
+            )
+            return
+        
+        self.sample_duration = (self.sample_volume / total_flow_ml_min) * 60.0
+        self.autosampler.sample(duration=self.sample_duration)
+        print(
+            f"Sample duration calculated from volume/flowrate: "
+            f"{self.sample_volume:.3f} mL / {total_flow_ml_min:.3f} mL/min = {self.sample_duration:.1f} s"
+        )
+        print(f"Sample taken: {sample_id}")
+
+        if self.main is not None and hasattr(self.main, "platform_monitor"):
+            event_text = (
+                f"SAMPLE_TAKEN; id={sample_id}"
+            )
+            try:
+                self.main.platform_monitor.continuous_log_function(event=event_text)
+            except Exception as error:
+                print(f"Failed to log sample event in platform monitor: {error}")
+        
+        
         pass
+
+
+
 
     def _apply_row_flowrates(self, row_data):
         total_flow_ml_min = 0.0

@@ -82,7 +82,6 @@ class AzuraFC61:
         Collects a sample for a specified duration (in seconds).
         If position is provided, moves to that position before collecting.
         """
-        
         self.move_next(collect_mode=0)  # Move to the next position without collecting
         time.sleep(1)  # Wait for the move to complete
         self.set_collect(1)  # Start collecting
