@@ -261,6 +261,25 @@ class PlatformMonitor(QtWidgets.QWidget):
         if self.flow_curve_cumulative is not None:
             self.flow_curve_cumulative.setData(self._time_series, self._flow_cumulative_value)
 
+        for pump_name in self.pressure_curves: # prevent potential KeyError if drift occurs in x/y lengths
+            y = self._pump_pressure_series.get(pump_name, []) #gets the pressure series for the pump
+            x = self._time_series #get the shared time series
+            n = min(len(x), len(y)) # calculate the number of points to plot based on the shorter of the two series to avoid index errors
+            if n > 0: # if there are points to plot, update the curve with the latest n points from both series starting from the same point in time
+                self.pressure_curves[pump_name].setData(x[-n:], y[-n:])
+            else:
+                self.pressure_curves[pump_name].setData([], [])
+        
+        for pump_name in self.flow_curves: # prevent potential KeyError if drift occurs in x/y lengths, operates the same as pressure ^
+            y = self._pump_flow_series.get(pump_name, [])
+            x = self._time_series
+            n = min(len(x), len(y))
+            if n > 0:
+                self.flow_curves[pump_name].setData(x[-n:], y[-n:])
+            else:
+                self.flow_curves[pump_name].setData([], [])
+        
+
     def export_data(self):
         """Export accumulated in-memory log data to a user-selected CSV file."""
         if self._log_dataframe.empty:
