@@ -16,9 +16,7 @@ class PlatformControl(QtWidgets.QWidget):
     def __init__(self, parent, main):
         super(PlatformControl, self).__init__(parent)
 
-        self.autosampler = fd.AzuraFC61() # initialize autosampler driver for use in sequence control methods
-
-        self.reactor_volume_ml = 5 # reactor volume
+        self.reactor_volume_ml = 2 # reactor volume
         self.fraction_delay_volume_ml = 0.5 # volume between reactor and fraction collector outlet 
 
         self.main = main
@@ -582,7 +580,29 @@ class PlatformControl(QtWidgets.QWidget):
         if callable(on_complete):
             on_complete()
 
-
+       
+    def _is_fraction_collector_connected(self):
+            return getattr(self.fractioncollector, "sock", None) is not None
+    
+    def _ensure_autosampler_connected(self):
+        if self.fractioncollector is None:
+            print("Autosampler is not initialized.")
+            return False
+    
+        if getattr(self.fractioncollector, "sock", None) is not None:
+            return True
+    
+        try:
+            self.fractioncollector.connect()
+            self.fractioncollector.set_remote()
+            self.fractionConnectButton.setText("Fraction Collector Connected")
+            return True
+       
+        except Exception as error:
+            print(f"Failed to connect autosampler: {error}")
+            self.fractionConnectButton.setText("Connect Fraction Collector")
+            return False
+    
 
 
     def autosampler_sample(self, sample_id):
@@ -591,9 +611,6 @@ class PlatformControl(QtWidgets.QWidget):
         Args:
             sample_id: Identifier for the sample (e.g., vial number, timestamp).
         """
-        # This method would contain logic to send a command to the autosampler to take a sample,
-        # and then communicate with the platform monitor to log the sample point with the provided sample_id.
-        
         if not self.update_sample_volume():
             return
         
@@ -605,9 +622,12 @@ class PlatformControl(QtWidgets.QWidget):
                 "Cannot calculate sample duration: total flowrate must be greater than 0 mL/min.",
             )
             return
+
+        if not self._ensure_autosampler_connected():
+            return
         
         self.sample_duration = (self.sample_volume / total_flow_ml_min) * 60.0
-        self.autosampler.sample(duration=self.sample_duration)
+        self.fractioncollector.sample(duration=self.sample_duration)
         print(
             f"Sample duration calculated from volume/flowrate: "
             f"{self.sample_volume:.3f} mL / {total_flow_ml_min:.3f} mL/min = {self.sample_duration:.1f} s"
@@ -615,16 +635,11 @@ class PlatformControl(QtWidgets.QWidget):
         print(f"Sample taken: {sample_id}")
 
         if self.main is not None and hasattr(self.main, "platform_monitor"):
-            event_text = (
-                f"SAMPLE_TAKEN; id={sample_id}"
-            )
+            event_text = f"SAMPLE_TAKEN; id={sample_id}"
             try:
                 self.main.platform_monitor.continuous_log_function(event=event_text)
             except Exception as error:
                 print(f"Failed to log sample event in platform monitor: {error}")
-        
-        
-        pass
 
 
 
