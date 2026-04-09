@@ -144,8 +144,8 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractionResetButton = QtWidgets.QPushButton("Reset (A1)")
         self.fractionNextPositionButton = QtWidgets.QPushButton("Move to Next Position")
         self.sampleVolumeLabel = QtWidgets.QLabel("Sample Volume (ml)")
-        self.sampleVolumeText = QtWidgets.QLineEdit("1")
-        self.sample_volume = 1.0
+        self.sampleVolumeText = QtWidgets.QLineEdit("0.5")
+        self.sample_volume = 0.5 # default sample volume in mL, used if user input is invalid. Updated whenever user edits sample volume text field and valid value is entered.
         self.sample_duration = 0.0
         
 

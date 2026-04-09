@@ -247,19 +247,15 @@ class PlatformMonitor(QtWidgets.QWidget):
             flow_val = pump_flows.get(pump_name, float('NaN'))
             
             self._pump_pressure_series[pump_name].append(pressure_val)
-            self.pressure_curves[pump_name].setData(self._time_series, self._pump_pressure_series[pump_name])
             
             # Apply correction factor to flow for display
             corrected_flow = flow_val * self.correction_factors[pump_name] if not math.isnan(flow_val) else float('NaN')
             self._pump_flow_series[pump_name].append(corrected_flow)
-            self.flow_curves[pump_name].setData(self._time_series, self._pump_flow_series[pump_name])
             
             if not math.isnan(flow_val):
                 cumulative_flow += flow_val
         
         self._flow_cumulative_value.append(cumulative_flow)
-        if self.flow_curve_cumulative is not None:
-            self.flow_curve_cumulative.setData(self._time_series, self._flow_cumulative_value)
 
         for pump_name in self.pressure_curves: # prevent potential KeyError if drift occurs in x/y lengths
             y = self._pump_pressure_series.get(pump_name, []) #gets the pressure series for the pump
@@ -279,6 +275,15 @@ class PlatformMonitor(QtWidgets.QWidget):
             else:
                 self.flow_curves[pump_name].setData([], [])
         
+        # Update cumulative flow curve with proper length matching
+        if self.flow_curve_cumulative is not None:
+            y = self._flow_cumulative_value
+            x = self._time_series
+            n = min(len(x), len(y))
+            if n > 0:
+                self.flow_curve_cumulative.setData(x[-n:], y[-n:])
+            else:
+                self.flow_curve_cumulative.setData([], [])
 
     def export_data(self):
         """Export accumulated in-memory log data to a user-selected CSV file."""
