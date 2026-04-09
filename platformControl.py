@@ -16,9 +16,9 @@ class PlatformControl(QtWidgets.QWidget):
     def __init__(self, parent, main):
         super(PlatformControl, self).__init__(parent)
 
-        self.autosampler = fd.AzuraFC61() # initialize autosampler driver for use in sequence control methods
+        self.fractioncollector = fd.AzuraFC61() # single Azura device used for both fraction collection and sampling
 
-        self.reactor_volume_ml = 5 # reactor volume
+        self.reactor_volume_ml = 2 # reactor volume
         self.fraction_delay_volume_ml = 0.556 # volume between reactor and fraction collector outlet 
 
         self.main = main
@@ -320,12 +320,28 @@ class PlatformControl(QtWidgets.QWidget):
         try:
             if self._is_fraction_collector_connected():
                 print("Fraction collector already connected.")
-                return
+                return True
             self.fractioncollector.connect()
             self.fractionConnectButton.setText("Fraction Collector Connected")
             self.fractioncollector.set_remote()
+            return True
         except Exception as error:
             print(f"Failed to connect fraction collector: {error}")
+            return False
+
+    def _retry_fraction_collector_command(self, command_name, command_callback):
+        try:
+            return command_callback()
+        except ConnectionError as error:
+            print(f"Fraction collector connection lost during {command_name}: {error}")
+            if not self.connect_fraction_collector():
+                return False
+
+            try:
+                return command_callback()
+            except Exception as retry_error:
+                print(f"Failed to {command_name} after reconnect: {retry_error}")
+                return False
 
 
     def disconnect_fraction_collector(self):
@@ -496,7 +512,7 @@ class PlatformControl(QtWidgets.QWidget):
         if target_temp:
             self.thermocontroller.targetTempText.setText(target_temp)
 
-########### Methods for running sequences and controlling autosampler ###########
+########### Methods for running sequences and controlling fractioncollector ###########
     def set_monitor_configuration(self):
         """Trigger platform monitor to load pump configuration."""
         if self.main is None or not hasattr(self.main, 'platform_monitor'):
@@ -585,13 +601,13 @@ class PlatformControl(QtWidgets.QWidget):
 
 
 
-    def autosampler_sample(self, sample_id, on_complete=None):
-        """Trigger autosampler to take a sample and mark the sample point in platform monitor.
+    def fractioncollector_sample(self, sample_id, on_complete=None):
+        """Trigger fraction collector to take a sample and mark the sample point in platform monitor.
         
         Args:
             sample_id: Identifier for the sample (e.g., vial number, timestamp).
         """
-        # This method would contain logic to send a command to the autosampler to take a sample,
+        # This method would contain logic to send a command to the fraction collector to take a sample,
         # and then communicate with the platform monitor to log the sample point with the provided sample_id.
         
         if not self.update_sample_volume():
@@ -612,40 +628,56 @@ class PlatformControl(QtWidgets.QWidget):
             f"{self.sample_volume:.3f} mL / {total_flow_ml_min:.3f} mL/min = {self.sample_duration:.1f} s"
         )
 
-        try:
-            self.autosampler.move_next(collect_mode=0)
-        except Exception as error:
-            print(f"Failed to move autosampler to next vial: {error}")
+        if not self.connect_fraction_collector():
+            return False
+
+        if not self._retry_fraction_collector_command(
+            "move fraction collector to next vial",
+            lambda: self.fractioncollector.move_next(collect_mode=0),
+        ):
             return False
 
         QtCore.QTimer.singleShot(
             1000,
-            lambda sid=sample_id, flow=total_flow_ml_min, callback=on_complete: self._start_autosampler_collection(sid, flow, callback),
+            lambda sid=sample_id, flow=total_flow_ml_min, callback=on_complete: self._start_fractioncollector_collection(sid, flow, callback),
         )
         return True
 
-    def _start_autosampler_collection(self, sample_id, total_flow_ml_min, on_complete=None):
-        try:
-            self.autosampler.set_collect(1)
-            print(f"Starting sample collection for {self.sample_duration:.1f} s.")
-        except Exception as error:
-            print(f"Failed to start sample collection: {error}")
+    def _start_fractioncollector_collection(self, sample_id, total_flow_ml_min, on_complete=None):
+        if not self.connect_fraction_collector():
             if callable(on_complete):
                 on_complete()
             return
 
+        if not self._retry_fraction_collector_command(
+            "start sample collection",
+            lambda: self.fractioncollector.set_collect(1),
+        ):
+            if callable(on_complete):
+                on_complete()
+            return
+
+        print(f"Starting sample collection for {self.sample_duration:.1f} s.")
+
         duration_ms = max(0, int(self.sample_duration * 1000))
         QtCore.QTimer.singleShot(
             duration_ms,
-            lambda sid=sample_id, flow=total_flow_ml_min, callback=on_complete: self._finish_autosampler_collection(sid, flow, callback),
+            lambda sid=sample_id, flow=total_flow_ml_min, callback=on_complete: self._finish_fractioncollector_collection(sid, flow, callback),
         )
 
-    def _finish_autosampler_collection(self, sample_id, total_flow_ml_min, on_complete=None):
-        try:
-            self.autosampler.set_collect(0)
+    def _finish_fractioncollector_collection(self, sample_id, total_flow_ml_min, on_complete=None):
+        if not self.connect_fraction_collector():
+            if callable(on_complete):
+                on_complete()
+            return
+
+        if not self._retry_fraction_collector_command(
+            "stop sample collection",
+            lambda: self.fractioncollector.set_collect(0),
+        ):
+            print("Failed to stop sample collection.")
+        else:
             print(f"Sample taken: {sample_id}")
-        except Exception as error:
-            print(f"Failed to stop sample collection: {error}")
 
         if self.main is not None and hasattr(self.main, "platform_monitor"):
             event_text = (
@@ -727,7 +759,7 @@ class PlatformControl(QtWidgets.QWidget):
     def _on_row_complete(self):
         current_row = getattr(self, "_sequence_row_index", 0)
         sample_id = f"row-{current_row + 1}"
-        started = self.autosampler_sample(
+        started = self.fractioncollector_sample(
             sample_id,
             on_complete=lambda row=current_row: self._advance_sequence_after_sample(row),
         )
