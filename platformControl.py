@@ -19,7 +19,7 @@ class PlatformControl(QtWidgets.QWidget):
         self.autosampler = fd.AzuraFC61() # initialize autosampler driver for use in sequence control methods
 
         self.reactor_volume_ml = 5 # reactor volume
-        self.fraction_delay_volume_ml = 0.5 # volume between reactor and fraction collector outlet 
+        self.fraction_delay_volume_ml = 0.556 # volume between reactor and fraction collector outlet 
 
         self.main = main
         self._layout = QtWidgets.QGridLayout()
@@ -714,13 +714,13 @@ class PlatformControl(QtWidgets.QWidget):
             self._on_row_complete()
             return
 
-        hold_volume_ml = 3.0 * float(self.reactor_volume_ml)
+        hold_volume_ml = (3.0 * float(self.reactor_volume_ml)) + self.fraction_delay_volume_ml
         hold_duration_s = (hold_volume_ml / total_flow_ml_min) * 60.0
         hold_duration_ms = int(hold_duration_s * 1000)
 
         print(
             f"Row hold started at total flow {total_flow_ml_min:.3f} mL/min for "
-            f"{hold_volume_ml:.2f} mL ({hold_duration_s:.1f} s)."
+            f"{hold_volume_ml:.2f} mL ({hold_duration_s:.1f} s) (reactor volume x3 + delay volume included)."
         )
         QtCore.QTimer.singleShot(hold_duration_ms, self._on_row_complete)
 
