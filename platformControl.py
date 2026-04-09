@@ -323,7 +323,7 @@ class PlatformControl(QtWidgets.QWidget):
                 return True
             self.fractioncollector.connect()
             self.fractionConnectButton.setText("Fraction Collector Connected")
-            self.fractioncollector.set_remote()
+            self.fractioncollector.set_remote(timeout_ms=0) # Set remote mode with no timeout to keep connection alive until explicitly disconnected
             return True
         except Exception as error:
             print(f"Failed to connect fraction collector: {error}")
