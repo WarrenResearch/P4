@@ -515,12 +515,12 @@ class PlatformControl(QtWidgets.QWidget):
 ########### Methods for running sequences and controlling fractioncollector ###########
     def set_monitor_configuration(self):
         """Trigger platform monitor to load pump configuration."""
-        if self.main is None or not hasattr(self.main, 'platform_monitor'):
+        if self.main is None or not hasattr(self.main, 'platform_monitor'): #if the window cant be found, throw an error message and return
             QtWidgets.QMessageBox.warning(self, "Error", "Platform Monitor not available.")
-            return
+            return #returns early to avoid calling method on non-existent monitor
         
         # Call the set_configuration method on platform_monitor
-        if hasattr(self.main.platform_monitor, 'set_configuration'):
+        if hasattr(self.main.platform_monitor, 'set_configuration'): #if the method exists, call it to update the monitor configuration based on current pumps
             self.main.platform_monitor.set_configuration()
         else:
             QtWidgets.QMessageBox.warning(self, "Error", "Platform Monitor configuration method not found.")
@@ -536,55 +536,58 @@ class PlatformControl(QtWidgets.QWidget):
             True if target temperature equals current temperature, False otherwise.
         """
         try:
-            target_temp_str = self.thermocontroller.targetTempText.text().strip()
+            target_temp_str = self.thermocontroller.targetTempText.text().strip() # get the target temperature from the thermocontroller widget as a string
             if not target_temp_str:
                 return False
-            target_temp = float(target_temp_str)
-        except (ValueError, AttributeError):
+            target_temp = float(target_temp_str) #convert the string into a float (new variable target_temp) for comparison with current temperature
+        except (ValueError, AttributeError): # except if an error is thrown
             return False
         
         try:
-            current_temp = float(temperature)
+            current_temp = float(temperature) # convert the input temperature (current temperature reading) into a float for comparison with target temperature
         except (ValueError, TypeError):
             return False
         
-        return current_temp == target_temp
+        return current_temp == target_temp # return True if current temperature equals target temperature, otherwise return False to indicate target has not been reached yet
     
-    def wash_step(self, on_complete=None):
-        wash_flowrate_ml_min = 1.0
+    def wash_step(self, on_complete=None): # runs solution through at 1 mol min
+        wash_flowrate_ml_min = 1.0 
         wash_volume_ml = 1.5 * float(self.reactor_volume_ml)
         wash_duration_s = (wash_volume_ml / wash_flowrate_ml_min) * 60.0
+        wash_duration_min = wash_duration_s / 60.0
         wash_duration_ms = int(wash_duration_s * 1000) # for qtimer.singleshot
 
-        active_pumps = []
+        active_pumps = [] #list of active pumps 
         for pump_widget in self.pump_widgets:
-            if not hasattr(pump_widget, "pumpObj"):
+            if not hasattr(pump_widget, "pumpObj"): #if the widget doesnt have pumpobj (i.e. not properly configured), skip it and move to the next pump widget
                 continue
 
             try:
-                pump_widget.setFlowrateText.setText(str(wash_flowrate_ml_min))
+                pump_widget.setFlowrateText.setText(str(wash_flowrate_ml_min)) # set the flowrate text field to the wash flowrate value (1 mL/min)
                 pump_widget.setFlowrate()
                 pump_widget.start()
-                active_pumps.append(pump_widget)
+                active_pumps.append(pump_widget) # add the pump widget to the list of active pumps that will be stopped after the wash duration elapses
             except Exception as error:
                 pump_name = pump_widget.nameEdit.text().strip() or "Unnamed pump"
                 print(f"Wash step skipped for {pump_name}: {error}")
 
-        if not active_pumps:
+        if not active_pumps: #if there are no pumps throw this error message
             print("Wash step aborted: no connected pumps available.")
-            return False
+            return False 
 
         print(
             f"Wash step running at {wash_flowrate_ml_min} mL/min for {wash_volume_ml:.2f} mL "
-            f"({wash_duration_s:.1f} s)."
+            f"({wash_duration_min:.1f} min)."
         )
-        QtCore.QTimer.singleShot(
+        #after wash duration has elapsed, call _finish_wash_step 
+        QtCore.QTimer.singleShot( 
             wash_duration_ms,
             lambda pumps=active_pumps, callback=on_complete: self._finish_wash_step(pumps, callback),
         )
         return True
 
-    def _finish_wash_step(self, active_pumps, on_complete=None):
+
+    def _finish_wash_step(self, active_pumps, on_complete=None): #gets the active pumps, sets them to 0.01 ml min
         for pump_widget in active_pumps:
             try:
                 pump_widget.setFlowrateText.setText('0.01')
@@ -600,20 +603,17 @@ class PlatformControl(QtWidgets.QWidget):
 
 
 
-
     def fractioncollector_sample(self, sample_id, on_complete=None):
         """Trigger fraction collector to take a sample and mark the sample point in platform monitor.
         
         Args:
             sample_id: Identifier for the sample (e.g., vial number, timestamp).
         """
-        # This method would contain logic to send a command to the fraction collector to take a sample,
-        # and then communicate with the platform monitor to log the sample point with the provided sample_id.
-        
-        if not self.update_sample_volume():
+
+        if not self.update_sample_volume(): # validate and update sample volume from user input before proceeding. If invalid, show error message and abort sampling.
             return False
         
-        total_flow_ml_min = self._get_total_current_flowrate_ml_min() # get total flowrate from all pumps for 
+        total_flow_ml_min = self._get_total_current_flowrate_ml_min() # get total flowrate from all pumps to calculate sample duration based on sample volume. If total flowrate is 0, show error message and abort sampling to avoid division by zero.
         if total_flow_ml_min <= 0:
             QtWidgets.QMessageBox.warning(
                 self,
@@ -622,31 +622,31 @@ class PlatformControl(QtWidgets.QWidget):
             )
             return False
         
-        self.sample_duration = (self.sample_volume / total_flow_ml_min) * 60.0
+        self.sample_duration = (self.sample_volume / total_flow_ml_min) * 60.0 #get sample duration
         print(
             f"Sample duration calculated from volume/flowrate: "
             f"{self.sample_volume:.3f} mL / {total_flow_ml_min:.3f} mL/min = {self.sample_duration:.1f} s"
         )
 
-        if not self.connect_fraction_collector():
+        if not self.connect_fraction_collector(): #failed to connect, show error message and abort sampling
             return False
 
-        if not self._retry_fraction_collector_command(
+        if not self._retry_fraction_collector_command( #tries the retry method incase connection drops for some reason, if it still fails after retrying, show error message and abort sampling
             "move fraction collector to next vial",
             lambda: self.fractioncollector.move_next(collect_mode=0),
         ):
             return False
 
-        QtCore.QTimer.singleShot(
+        QtCore.QTimer.singleShot( #schedules the collection to start after 1 second
             1000,
             lambda sid=sample_id, flow=total_flow_ml_min, callback=on_complete: self._start_fractioncollector_collection(sid, flow, callback),
         )
         return True
 
-    def _start_fractioncollector_collection(self, sample_id, total_flow_ml_min, on_complete=None):
+    def _start_fractioncollector_collection(self, sample_id, total_flow_ml_min, on_complete=None): #called after 1 second delay from fractioncollector_sample, starts the sample collection and schedules the stop collection after the calculated sample duration has elapsed
         if not self.connect_fraction_collector():
             if callable(on_complete):
-                on_complete()
+                on_complete() # check if on_complete is a callable function before calling it to avoid errors, then return to abort sampling since we failed to connect to the fraction collector
             return
 
         if not self._retry_fraction_collector_command(
@@ -659,7 +659,7 @@ class PlatformControl(QtWidgets.QWidget):
 
         print(f"Starting sample collection for {self.sample_duration:.1f} s.")
 
-        duration_ms = max(0, int(self.sample_duration * 1000))
+        duration_ms = max(0, int(self.sample_duration * 1000)) #after a delay of the sample duration, send a signal to stop sample collection
         QtCore.QTimer.singleShot(
             duration_ms,
             lambda sid=sample_id, flow=total_flow_ml_min, callback=on_complete: self._finish_fractioncollector_collection(sid, flow, callback),
@@ -679,11 +679,10 @@ class PlatformControl(QtWidgets.QWidget):
         else:
             print(f"Sample taken: {sample_id}")
 
-        if self.main is not None and hasattr(self.main, "platform_monitor"):
+        if self.main is not None and hasattr(self.main, "platform_monitor"): # stamp the sample event on platform monitor 
             event_text = (
                 f"SAMPLE_TAKEN;id={sample_id};"
-                f"volume_ml={self.sample_volume:.3f};duration_s={self.sample_duration:.1f};"
-                f"flow_ml_min={total_flow_ml_min:.3f}"
+                f"volume_ml={self.sample_volume:.3f}"
             )
             try:
                 self.main.platform_monitor.continuous_log_function(event=event_text)
@@ -693,10 +692,7 @@ class PlatformControl(QtWidgets.QWidget):
         if callable(on_complete):
             on_complete()
 
-
-
-
-    def _apply_row_flowrates(self, row_data):
+    def _apply_row_flowrates(self, row_data): #set flowrates for each pump based on the row  (flow_column) values
         total_flow_ml_min = 0.0
         for pump_widget in self.pump_widgets:
             if not hasattr(pump_widget, "pumpObj"):
@@ -725,17 +721,17 @@ class PlatformControl(QtWidgets.QWidget):
 
         return total_flow_ml_min
 
-    def _poll_temp_and_handle_row(self):
+    def _poll_temp_and_handle_row(self): #checks if we have reached target temperature yet, if not, waits 2 seconds and checks again
         current_temp_text = self.thermocontroller.currentTempDisplay.text().strip()
         if not self.temp_reached(current_temp_text):
             QtCore.QTimer.singleShot(2000, self._poll_temp_and_handle_row)
             return
 
-        print("Target temperature reached. Starting wash step.")
+        print("Target temperature reached. Starting wash step.") #once reached, start wash step
         self.wash_step(on_complete=self._on_wash_complete_for_row)
 
     def _on_wash_complete_for_row(self):
-        row_data = getattr(self, "_active_sequence_row_data", None)
+        row_data = getattr(self, "_active_sequence_row_data", None) #get active row data
         if not isinstance(row_data, dict):
             print("No active sequence row found after wash step.")
             return
@@ -766,7 +762,7 @@ class PlatformControl(QtWidgets.QWidget):
         if not started:
             self._advance_sequence_after_sample(current_row)
 
-    def _advance_sequence_after_sample(self, current_row):
+    def _advance_sequence_after_sample(self, current_row): #after sample collection is triggered for the current row, advance to the next row and start the process again. If we have reached the end of the sequence, stop running.
         self._sequence_row_index = current_row + 1
         if self._sequence_row_index >= len(self._sequence_df):
             print("Sequence complete.")
