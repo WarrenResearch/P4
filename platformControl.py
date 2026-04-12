@@ -346,49 +346,49 @@ class PlatformControl(QtWidgets.QWidget):
             self.fractioncollector.set_remote(timeout_ms=0) # Set remote mode with no timeout to keep connection alive until explicitly disconnected
             return True
         except Exception as error:
-            print(f"Failed to connect fraction collector: {error}")
+            print(f"[{time.strftime('%H:%M:%S')}] Failed to connect fraction collector: {error}")
             return False
 
     def _retry_fraction_collector_command(self, command_name, command_callback):
         try:
             return command_callback()
         except ConnectionError as error:
-            print(f"Fraction collector connection lost during {command_name}: {error}")
+            print(f"[{time.strftime('%H:%M:%S')}] Fraction collector connection lost during {command_name}: {error}")
             if not self.connect_fraction_collector():
                 return False
 
             try:
                 return command_callback()
             except Exception as retry_error:
-                print(f"Failed to {command_name} after reconnect: {retry_error}")
+                print(f"[{time.strftime('%H:%M:%S')}] Failed to {command_name} after reconnect: {retry_error}")
                 return False
 
 
     def disconnect_fraction_collector(self):
         try:
             if not self._is_fraction_collector_connected():
-                print("Fraction collector is not connected.")
+                print(f"[{time.strftime('%H:%M:%S')}] Fraction collector is not connected.")
                 return
             self.fractioncollector.disconnect()
             self.fractionConnectButton.setText("Connect Fraction Collector")
         except Exception as error:
-            print(f"Failed to disconnect fraction collector: {error}")
+            print(f"[{time.strftime('%H:%M:%S')}] Failed to disconnect fraction collector: {error}")
 
 
     def move_to_next_position(self):
         if not self._is_fraction_collector_connected():
-            print("Connect the fraction collector first.")
+            print(f"[{time.strftime('%H:%M:%S')}] Connect the fraction collector first.")
             return
 
         try:
             self.fractioncollector.move_next()
         except Exception as error:
-            print(f"Failed to move fraction collector to next position: {error}")
+            print(f"[{time.strftime('%H:%M:%S')}] Failed to move fraction collector to next position: {error}")
 
     def move_fraction_collector(self):
         position = self.fractionMovePositionText.text().strip().upper()
         if not position:
-            print("Please enter a move position (e.g. A1).")
+            print(f"[{time.strftime('%H:%M:%S')}] Please enter a move position (e.g. A1).")
             return
 
         try:
@@ -397,19 +397,19 @@ class PlatformControl(QtWidgets.QWidget):
             self.fractioncollector.set_remote(timeout_ms=0) 
             
             self.fractioncollector.move_to_vial(position)
-            print(f"Moved to {position}")
+            print(f"[{time.strftime('%H:%M:%S')}] Moved to {position}")
             
         except ConnectionError:
-            print("Connection lost. Please click Connect again.")
+            print(f"[{time.strftime('%H:%M:%S')}] Connection lost. Please click Connect again.")
             self.fractionConnectButton.setText("Connect Fraction Collector")
             
         except Exception as error:
-            print(f"Failed to move: {error}")
+            print(f"[{time.strftime('%H:%M:%S')}] Failed to move: {error}")
 
             try:
                 self.fractioncollector.move_to_vial(position)
             except Exception as error:
-                print(f"Failed to move fraction collector to {position}: {error}")
+                print(f"[{time.strftime('%H:%M:%S')}] Failed to move fraction collector to {position}: {error}")
 
     def reset_fraction_collector(self):
         self.fractionMovePositionText.setText("A1")
@@ -813,18 +813,18 @@ class PlatformControl(QtWidgets.QWidget):
     def _advance_sequence_after_sample(self, current_row): #after sample collection is triggered for the current row, advance to the next row and start the process again. If we have reached the end of the sequence, stop running.
         self._sequence_row_index = current_row + 1
         if self._sequence_row_index >= len(self._sequence_df):
-            print("Sequence complete.")
+            print(f"[{time.strftime('%H:%M:%S')}] Sequence complete.")
             self._sequence_running = False
             return
 
         self._run_current_row()
 
     def _run_current_row(self): # set target temp, wait for temp reached, start wash step, set flowrates, wait for 3 reactor volumes to elapse, sample, then move to next row and repeat
-        if not getattr(self, "_sequence_running", False):
+        if not getattr(self, f"[{time.strftime('%H:%M:%S')}] Sequence running", False):
             return
 
         if self._sequence_row_index >= len(self._sequence_df):
-            print("Sequence complete.")
+            print(f"[{time.strftime('%H:%M:%S')}] Sequence complete.")
             self._sequence_running = False
             return
 
@@ -853,7 +853,7 @@ class PlatformControl(QtWidgets.QWidget):
 
         self.thermocontroller.targetTempText.setText(str(next_temp).strip())
         self.thermocontroller.setTargetTemperature()
-        print(f"Row {self._sequence_row_index + 1}: target temperature set to {next_temp} C.")
+        print(f"[{time.strftime('%H:%M:%S')}] Row {self._sequence_row_index + 1}: target temperature set to {next_temp} C.")
 
         self._poll_temp_and_handle_row()
 
@@ -863,7 +863,7 @@ class PlatformControl(QtWidgets.QWidget):
         """Run full sequence non-blocking, row-by-row."""
         self._sequence_df = self.get_sequence_targets_df() # extract df from table 
         if self._sequence_df.empty:
-            print("reactor_sequence is empty.")
+            print(f"[{time.strftime('%H:%M:%S')}] reactor_sequence is empty.")
             return False
 
         temp_columns = [column for column in self._sequence_df.columns if "Temperature" in column]
