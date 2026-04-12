@@ -18,7 +18,7 @@ class PlatformControl(QtWidgets.QWidget):
 
         self.fractioncollector = fd.AzuraFC61() # single Azura device used for both fraction collection and sampling
 
-        self.reactor_volume_ml = 2 # reactor volume
+        
         self.fraction_delay_volume_ml = 0.556 # volume between reactor and fraction collector outlet 
 
         self.main = main
@@ -143,11 +143,24 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractionMoveButton = QtWidgets.QPushButton("Move to Position")
         self.fractionResetButton = QtWidgets.QPushButton("Reset (A1)")
         self.fractionNextPositionButton = QtWidgets.QPushButton("Move to Next Position")
+
         self.sampleVolumeLabel = QtWidgets.QLabel("Sample Volume (ml)")
         self.sampleVolumeText = QtWidgets.QLineEdit("0.5")
         self.sample_volume = 0.5 # default sample volume in mL, used if user input is invalid. Updated whenever user edits sample volume text field and valid value is entered.
-        self.sample_duration = 0.0
+        self.sample_duration = 0.0 
         
+        self.sample_count = 1 #number of samples to be taken
+        self.sampleCountLablel = QtWidgets.QLabel("Sample count")
+        self.sampleCountText = QtWidgets.QLineEdit("1")
+
+        self.reactorVolumeLabel = QtWidgets.QLabel("Reactor Volume (ml)")
+        self.reactorVolumeText = QtWidgets.QLineEdit("2")
+        self.reactor_volume_ml = 2 # default reactor volume in mL
+    
+        
+        self.fractionDelayVolumeLabel = QtWidgets.QLabel("Delay Volume (ml)")
+        self.fractionDelayVolumeText = QtWidgets.QLineEdit("0.556")
+        self.fraction_delay_volume_ml = 0.556 # starting delay volume
 
         self.fractioncollectorBoxLayout.addWidget(self.fractionConnectButton)
         self.fractioncollectorBoxLayout.addWidget(self.fractionDisconnectButton)
@@ -158,6 +171,12 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractioncollectorBoxLayout.addWidget(self.fractionNextPositionButton)
         self.fractioncollectorBoxLayout.addWidget(self.sampleVolumeLabel)
         self.fractioncollectorBoxLayout.addWidget(self.sampleVolumeText)
+        self.fractioncollectorBoxLayout.addWidget(self.sampleCountLablel)
+        self.fractioncollectorBoxLayout.addWidget(self.sampleCountText)
+        self.fractioncollectorBoxLayout.addWidget(self.reactorVolumeLabel)
+        self.fractioncollectorBoxLayout.addWidget(self.reactorVolumeText)
+        self.fractioncollectorBoxLayout.addWidget(self.fractionDelayVolumeLabel)
+        self.fractioncollectorBoxLayout.addWidget(self.fractionDelayVolumeText)
         self.fractioncollectorBoxLayout.addStretch(1)
 
         self.fractionConnectButton.clicked.connect(self.connect_fraction_collector)
@@ -166,6 +185,7 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractionDisconnectButton.clicked.connect(self.disconnect_fraction_collector)
         self.fractionNextPositionButton.clicked.connect(self.move_to_next_position)
         self.sampleVolumeText.editingFinished.connect(self.update_sample_volume)
+        self.sampleCountText.editingFinished.connect(self.update_sample_count)
 
         self._layout.addWidget(self.fractioncollectorBox, 0, 1, 1, 1, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
 
@@ -414,6 +434,20 @@ class PlatformControl(QtWidgets.QWidget):
             return False
 
         self.sample_volume = value
+        return True
+
+    def update_sample_count(self):
+        value_text = self.sampleCountText.text().strip()
+        try:
+            value = int(value_text)
+            if value <= 0:
+                raise ValueError
+        except ValueError:
+            QtWidgets.QMessageBox.warning(self, "Sample count", "Enter a positive whole number of samples.")
+            self.sampleCountText.setText(str(self.sample_count))
+            return False
+
+        self.sample_count = value
         return True
 
     def _get_total_current_flowrate_ml_min(self): #cycles through the pump widgets and sums the current flowrate values to calculate total flowrate in mL/min for use in sample duration calculation
@@ -754,13 +788,27 @@ class PlatformControl(QtWidgets.QWidget):
 
     def _on_row_complete(self):
         current_row = getattr(self, "_sequence_row_index", 0)
-        sample_id = f"row-{current_row + 1}"
+        self._sample_current_row(current_row, 1)
+
+    def _sample_current_row(self, current_row, sample_number): #handles the sample collection for the current row, if sample count is greater than 1, it will call itself recursively until all samples for the current row are collected before advancing to the next row
+        if not self.update_sample_count():
+            self._advance_sequence_after_sample(current_row)
+            return
+
+        sample_id = f"row-{current_row + 1}-sample-{sample_number}"
         started = self.fractioncollector_sample(
             sample_id,
-            on_complete=lambda row=current_row: self._advance_sequence_after_sample(row),
+            on_complete=lambda row=current_row, sample=sample_number: self._after_row_sample(row, sample),
         )
         if not started:
             self._advance_sequence_after_sample(current_row)
+
+    def _after_row_sample(self, current_row, sample_number): # if we have more samples to take for the current row, call _sample_current_row again with the next sample number, otherwise advance to the next row   
+        if sample_number < self.sample_count:
+            self._sample_current_row(current_row, sample_number + 1)
+            return
+
+        self._advance_sequence_after_sample(current_row)
 
     def _advance_sequence_after_sample(self, current_row): #after sample collection is triggered for the current row, advance to the next row and start the process again. If we have reached the end of the sequence, stop running.
         self._sequence_row_index = current_row + 1
