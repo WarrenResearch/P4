@@ -855,7 +855,10 @@ class PlatformControl(QtWidgets.QWidget):
         sample_id = f"row-{current_row + 1}-sample-{sample_number}"
         started = self.fractioncollector_sample(
             sample_id,
-            on_complete=lambda row=current_row, sample=sample_number: self._after_row_sample(row, sample),
+            on_complete=lambda row=current_row, sample=sample_number: QtCore.QTimer.singleShot(
+                1000, #delay the next sample collection by 1 second
+                lambda r=row, s=sample: self._after_row_sample(r, s),
+            ),
         )
         if not started:
             self._advance_sequence_after_sample(current_row)
