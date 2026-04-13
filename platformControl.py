@@ -799,7 +799,7 @@ class PlatformControl(QtWidgets.QWidget):
         started = self.fractioncollector_sample(
             sample_id,
             on_complete=lambda row=current_row, sample=sample_number: QtCore.QTimer.singleShot(
-                1000,
+                1000, #delay the next sample collection by 1 second
                 lambda r=row, s=sample: self._after_row_sample(r, s),
             ),
         )
