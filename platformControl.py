@@ -150,17 +150,18 @@ class PlatformControl(QtWidgets.QWidget):
         self.sample_duration = 0.0 
         
         self.sample_count = 1 #number of samples to be taken
-        self.sampleCountLablel = QtWidgets.QLabel("Sample count")
+        self.sampleCountLabel = QtWidgets.QLabel("Sample count")
         self.sampleCountText = QtWidgets.QLineEdit("1")
 
+        self.reactor_volume_ml = 2 # default reactor volume in mL
         self.reactorVolumeLabel = QtWidgets.QLabel("Reactor Volume (ml)")
         self.reactorVolumeText = QtWidgets.QLineEdit("2")
-        self.reactor_volume_ml = 2 # default reactor volume in mL
-    
         
+    
+        self.fraction_delay_volume_ml = 0.556 # starting delay volume
         self.fractionDelayVolumeLabel = QtWidgets.QLabel("Delay Volume (ml)")
         self.fractionDelayVolumeText = QtWidgets.QLineEdit("0.556")
-        self.fraction_delay_volume_ml = 0.556 # starting delay volume
+        
 
         self.fractioncollectorBoxLayout.addWidget(self.fractionConnectButton)
         self.fractioncollectorBoxLayout.addWidget(self.fractionDisconnectButton)
@@ -171,13 +172,15 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractioncollectorBoxLayout.addWidget(self.fractionNextPositionButton)
         self.fractioncollectorBoxLayout.addWidget(self.sampleVolumeLabel)
         self.fractioncollectorBoxLayout.addWidget(self.sampleVolumeText)
-        self.fractioncollectorBoxLayout.addWidget(self.sampleCountLablel)
+        self.fractioncollectorBoxLayout.addWidget(self.sampleCountLabel)
         self.fractioncollectorBoxLayout.addWidget(self.sampleCountText)
         self.fractioncollectorBoxLayout.addWidget(self.reactorVolumeLabel)
         self.fractioncollectorBoxLayout.addWidget(self.reactorVolumeText)
         self.fractioncollectorBoxLayout.addWidget(self.fractionDelayVolumeLabel)
         self.fractioncollectorBoxLayout.addWidget(self.fractionDelayVolumeText)
         self.fractioncollectorBoxLayout.addStretch(1)
+
+
 
         self.fractionConnectButton.clicked.connect(self.connect_fraction_collector)
         self.fractionMoveButton.clicked.connect(self.move_fraction_collector)
@@ -186,6 +189,8 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractionNextPositionButton.clicked.connect(self.move_to_next_position)
         self.sampleVolumeText.editingFinished.connect(self.update_sample_volume)
         self.sampleCountText.editingFinished.connect(self.update_sample_count)
+        self.reactorVolumeText.editingFinished.connect(self.update_reactor_volume)
+        self.fractionDelayVolumeText.editingFinished.connect(self.update_fraction_delay_volume)
 
         self._layout.addWidget(self.fractioncollectorBox, 0, 1, 1, 1, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
 
@@ -450,6 +455,34 @@ class PlatformControl(QtWidgets.QWidget):
         self.sample_count = value
         return True
 
+    def update_reactor_volume(self):
+        value_text = self.reactorVolumeText.text().strip()
+        try:
+            value = float(value_text)
+            if value <= 0:
+                raise ValueError
+        except ValueError:
+            QtWidgets.QMessageBox.warning(self, "Reactor volume", "Enter a positive number of milliliters.")
+            self.reactorVolumeText.setText(str(self.reactor_volume_ml))
+            return False
+
+        self.reactor_volume_ml = value
+        return True
+
+    def update_fraction_delay_volume(self):
+        value_text = self.fractionDelayVolumeText.text().strip()
+        try:
+            value = float(value_text)
+            if value < 0:
+                raise ValueError
+        except ValueError:
+            QtWidgets.QMessageBox.warning(self, "Delay volume", "Enter a non-negative number of milliliters.")
+            self.fractionDelayVolumeText.setText(str(self.fraction_delay_volume_ml))
+            return False
+
+        self.fraction_delay_volume_ml = value
+        return True
+
     def _get_total_current_flowrate_ml_min(self): #cycles through the pump widgets and sums the current flowrate values to calculate total flowrate in mL/min for use in sample duration calculation
         total_flow_ml_min = 0.0
         for pump_widget in self.pump_widgets:
@@ -497,6 +530,8 @@ class PlatformControl(QtWidgets.QWidget):
             "pumps": pumps,
             "valves": valves,
             "thermocontroller": thermocontroller,
+            "reactor_volume_ml": self.reactor_volume_ml,
+            "fraction_delay_volume_ml": self.fraction_delay_volume_ml,
         }
 
         with open(self._platform_file_path(), "w", encoding="utf-8") as file_handle:
@@ -545,6 +580,28 @@ class PlatformControl(QtWidgets.QWidget):
         target_temp = thermocontroller_data.get("target_temp", "")
         if target_temp:
             self.thermocontroller.targetTempText.setText(target_temp)
+
+        reactor_volume = data.get("reactor_volume_ml", self.reactor_volume_ml)
+        try:
+            reactor_volume = float(reactor_volume)
+            if reactor_volume <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            reactor_volume = self.reactor_volume_ml
+
+        self.reactor_volume_ml = reactor_volume
+        self.reactorVolumeText.setText(str(reactor_volume))
+
+        fraction_delay_volume = data.get("fraction_delay_volume_ml", self.fraction_delay_volume_ml)
+        try:
+            fraction_delay_volume = float(fraction_delay_volume)
+            if fraction_delay_volume < 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            fraction_delay_volume = self.fraction_delay_volume_ml
+
+        self.fraction_delay_volume_ml = fraction_delay_volume
+        self.fractionDelayVolumeText.setText(str(fraction_delay_volume))
 
 ########### Methods for running sequences and controlling fractioncollector ###########
     def set_monitor_configuration(self):
@@ -820,7 +877,7 @@ class PlatformControl(QtWidgets.QWidget):
         self._run_current_row()
 
     def _run_current_row(self): # set target temp, wait for temp reached, start wash step, set flowrates, wait for 3 reactor volumes to elapse, sample, then move to next row and repeat
-        if not getattr(self, f"[{time.strftime('%H:%M:%S')}] Sequence running", False):
+        if not getattr(self, "_sequence_running", False):
             return
 
         if self._sequence_row_index >= len(self._sequence_df):
@@ -874,4 +931,5 @@ class PlatformControl(QtWidgets.QWidget):
         self._sequence_row_index = 0
         self._sequence_running = True
         self._run_current_row()
+        print(f"[{time.strftime('%H:%M:%S')}] Sequence started.")
         return True
