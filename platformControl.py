@@ -113,11 +113,13 @@ class PlatformControl(QtWidgets.QWidget):
         self.moveUpRowButton = QtWidgets.QPushButton("Move up")
         self.moveDownRowButton = QtWidgets.QPushButton("Move down")
         self.runSequenceButton = QtWidgets.QPushButton("Run Sequence")
+        self.stopSequenceButton = QtWidgets.QPushButton("Stop Sequence")
         self.tableButtonsLayout.addWidget(self.addRowButton)
         self.tableButtonsLayout.addWidget(self.removeRowButton)
         self.tableButtonsLayout.addWidget(self.moveUpRowButton)
         self.tableButtonsLayout.addWidget(self.moveDownRowButton)
         self.tableButtonsLayout.addWidget(self.runSequenceButton)
+        self.tableButtonsLayout.addWidget(self.stopSequenceButton)
         self.tableButtonsLayout.addStretch(1)
         self.sequenceTargetsBoxLayout.addLayout(self.tableButtonsLayout)
 
@@ -126,6 +128,7 @@ class PlatformControl(QtWidgets.QWidget):
         self.moveUpRowButton.clicked.connect(lambda: self.move_selected_row(-1))
         self.moveDownRowButton.clicked.connect(lambda: self.move_selected_row(1))
         self.runSequenceButton.clicked.connect(self.run_sequence)
+        self.stopSequenceButton.clicked.connect(self.stop_sequence)
         self.refresh_target_columns()
         self.sequence_targets_df = self.get_sequence_targets_df()
         self.targetsTable.itemChanged.connect(self._on_targets_table_changed)
@@ -936,3 +939,36 @@ class PlatformControl(QtWidgets.QWidget):
         self._run_current_row()
         print(f"[{time.strftime('%H:%M:%S')}] Sequence started.")
         return True
+
+    def stop_sequence(self):
+        """Stop the running sequence, set all pumps to 0.1 mL/min, and reset the auto sampler."""
+        # Stop the sequence
+        self._sequence_running = False
+        print(f"[{time.strftime('%H:%M:%S')}] Sequence stopped.")
+
+        # Set all pumps to 0.1 mL/min and stop them
+        for pump_widget in self.pump_widgets:
+            if not hasattr(pump_widget, "pumpObj"):
+                continue
+
+            try:
+                pump_name = pump_widget.nameEdit.text().strip() or "Unnamed pump"
+                pump_widget.setFlowrateText.setText("0.1")
+                pump_widget.setFlowrate()
+                pump_widget.stop()
+                print(f"[{time.strftime('%H:%M:%S')}] {pump_name} stopped at 0.1 mL/min.")
+            except Exception as error:
+                pump_name = pump_widget.nameEdit.text().strip() or "Unnamed pump"
+                print(f"[{time.strftime('%H:%M:%S')}] Failed to stop {pump_name}: {error}")
+
+        # Reset the fraction collector to position A1
+        try:
+            if self._is_fraction_collector_connected():
+                self.reset_fraction_collector()
+                print(f"[{time.strftime('%H:%M:%S')}] Fraction collector reset to A1.")
+            else:
+                print(f"[{time.strftime('%H:%M:%S')}] Fraction collector not connected.")
+        except Exception as error:
+            print(f"[{time.strftime('%H:%M:%S')}] Failed to reset fraction collector: {error}")
+
+        print(f"[{time.strftime('%H:%M:%S')}] Sequence stop complete.")
