@@ -77,3 +77,9 @@ class AzuraFC61:
         """Switches the collecting valve: 1 for COLLECT, 0 for WASTE[cite: 486]."""
         return self._send_command(f"COLLECT:{state}")
     
+    def position(self):
+        """Returns the current position of the needle"""
+        output = self._send_command("get_status")
+        parts = output.replace("STATUS:","").split(",")
+        position = parts[7]
+        return position
