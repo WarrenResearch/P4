@@ -2,6 +2,7 @@ from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtSerialPort import QSerialPortInfo
 import thermocontroller_driver
+import time
 
 
 class ThermocontrollerControl(QtWidgets.QWidget):
@@ -88,7 +89,7 @@ class ThermocontrollerControl(QtWidgets.QWidget):
 
         # Connect signals
         self.connectButton.pressed.connect(self.connect)
-        self.applyButton.pressed.connect(self.setTargetTemperature)
+        self.applyButton.pressed.connect(lambda: self.setTargetTemperature(show_popup=True))
         self.disconnectButton.pressed.connect(self.disconnect)
         self.nameEdit.textChanged.connect(self._on_name_changed)
 
@@ -103,6 +104,9 @@ class ThermocontrollerControl(QtWidgets.QWidget):
         self.portUpdateTimer.setInterval(2000)
         self.portUpdateTimer.timeout.connect(self.updatePorts)
         self.portUpdateTimer.start()
+
+    def _timestamp(self):
+        return time.strftime('%H:%M:%S')
 
     def _on_name_changed(self, text):
         name = text.strip() or self._default_name
@@ -126,35 +130,20 @@ class ThermocontrollerControl(QtWidgets.QWidget):
         try:
             comPort = self.comPort.currentText()
             if not comPort:
-                msgbox = QMessageBox(self)
-                msgbox.setWindowTitle("No COM Port Selected")
-                msgbox.setText("Please select a COM port")
-                msgbox.setFixedSize(250, 75)
-                msgbox.exec()
+                print(f"[{self._timestamp()}] Please select a COM port.")
                 return
             
             # Create thermocontroller object and connect
             self.thermocontrollerObj = thermocontroller_driver.connect(port=comPort)
             
             if self.thermocontrollerObj and self.thermocontrollerObj.status:
-                print(f'Thermocontroller connected on {comPort}')
+                print(f"[{self._timestamp()}] Thermocontroller connected on {comPort}")
                 self.connectButton.setEnabled(False)
                 self.timer.start()
-                
-                msgbox = QMessageBox(self)
-                msgbox.setWindowTitle("Connection Successful")
-                msgbox.setText(f"Connected to thermocontroller on {comPort}")
-                msgbox.setFixedSize(250, 75)
-                msgbox.exec()
             else:
                 raise Exception("Failed to connect to thermocontroller")
         except Exception as e:
-            print(f'Failed to connect: {str(e)}')
-            msgbox = QMessageBox(self)
-            msgbox.setWindowTitle("Connection Failed")
-            msgbox.setText(f"Could not connect to thermocontroller:\n{str(e)}")
-            msgbox.setFixedSize(300, 100)
-            msgbox.exec()
+            print(f"[{self._timestamp()}] Failed to connect: {str(e)}")
 
     def disconnect(self):
         """Disconnect from the thermocontroller"""
@@ -165,49 +154,31 @@ class ThermocontrollerControl(QtWidgets.QWidget):
                 self.timer.stop()
                 self.currentTempDisplay.setText("--")
                 self.connectButton.setEnabled(True)
-                print('Thermocontroller disconnected')
-                
-                msgbox = QMessageBox(self)
-                msgbox.setWindowTitle("Disconnected")
-                msgbox.setText("Thermocontroller disconnected and set to safe temperature (20°C)")
-                msgbox.setFixedSize(300, 75)
-                msgbox.exec()
+                print(f"[{self._timestamp()}] Thermocontroller disconnected and set to safe temperature (20°C)")
         except Exception as e:
-            print(f'Error during disconnect: {str(e)}')
+            print(f"[{self._timestamp()}] Error during disconnect: {str(e)}")
 
-    def setTargetTemperature(self):
+    def setTargetTemperature(self, show_popup=False):
         """Set the target temperature on the thermocontroller"""
         try:
             if not self.thermocontrollerObj:
-                msgbox = QMessageBox(self)
-                msgbox.setWindowTitle("Not Connected")
-                msgbox.setText("Please connect to thermocontroller first")
-                msgbox.setFixedSize(250, 75)
-                msgbox.exec()
+                print(f"[{self._timestamp()}] Please connect to thermocontroller first.")
                 return
             
             targetTemp = float(self.targetTempText.text())
             self.thermocontrollerObj.setpoint_1(targetTemp*10)
-            print(f'Target temperature set to {targetTemp}°C')
-            
-            msgbox = QMessageBox(self)
-            msgbox.setWindowTitle("Temperature Set")
-            msgbox.setText(f"Target temperature set to {targetTemp}°C")
-            msgbox.setFixedSize(250, 75)
-            msgbox.exec()
+            print(f"[{self._timestamp()}] Target temperature set to {targetTemp}°C")
+
+            if show_popup:
+                msgbox = QMessageBox(self)
+                msgbox.setWindowTitle("Temperature Set")
+                msgbox.setText(f"Target temperature set to {targetTemp}°C")
+                msgbox.setFixedSize(250, 75)
+                msgbox.exec()
         except ValueError:
-            msgbox = QMessageBox(self)
-            msgbox.setWindowTitle("Invalid Input")
-            msgbox.setText("Please enter a valid temperature value")
-            msgbox.setFixedSize(250, 75)
-            msgbox.exec()
+            print(f"[{self._timestamp()}] Please enter a valid temperature value.")
         except Exception as e:
-            print(f'Error setting temperature: {str(e)}')
-            msgbox = QMessageBox(self)
-            msgbox.setWindowTitle("Error")
-            msgbox.setText(f"Error setting temperature:\n{str(e)}")
-            msgbox.setFixedSize(300, 100)
-            msgbox.exec()
+            print(f"[{self._timestamp()}] Error setting temperature: {str(e)}")
 
     def updateCurrentTemperature(self):
         """Update the current temperature display from the thermocontroller"""
@@ -219,11 +190,14 @@ class ThermocontrollerControl(QtWidgets.QWidget):
                 else:
                     self.currentTempDisplay.setText("--")
         except Exception as e:
-            print(f'Error reading temperature: {str(e)}')
+            print(f"[{self._timestamp()}] Error reading temperature: {str(e)}")
             self.currentTempDisplay.setText("--")
 
 
     def safetyShutdown(self):
+        if not self.thermocontrollerObj:
+            return
+
         if self.thermocontrollerObj.indicated() > 1500:  # If temperature exceeds 150°C
             self.thermocontrollerObj.setpoint_1(200)  # Set to a safe temperature (e.g., 20°C)
-            print("Safety shutdown activated: temperature exceeded 150°C, setpoint set to 20°C")
+            print(f"[{self._timestamp()}] Safety shutdown activated: temperature exceeded 150°C, setpoint set to 20°C")

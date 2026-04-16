@@ -197,6 +197,10 @@ class PlatformControl(QtWidgets.QWidget):
 
         self._layout.addWidget(self.fractioncollectorBox, 0, 1, 1, 1, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
 
+        self._sequence_running = False
+        self._sequence_callback_token = 0
+        self._sequence_timers = []
+
 
     def add_pump(self):
         self.pump_count += 1
@@ -429,6 +433,46 @@ class PlatformControl(QtWidgets.QWidget):
         if combo.findText(value) == -1:
             combo.addItem(value)
         combo.setCurrentText(value)
+
+    def _invalidate_sequence_callbacks(self):
+        self._sequence_callback_token += 1
+
+    def _cancel_sequence_timers(self):
+        for timer in list(self._sequence_timers):
+            try:
+                timer.stop()
+                timer.deleteLater()
+            except Exception:
+                pass
+        self._sequence_timers.clear()
+
+    def _schedule_sequence_timer(self, delay_ms, callback):
+        timer = QtCore.QTimer(self)
+        timer.setSingleShot(True)
+        expected_token = self._sequence_callback_token
+
+        def _on_timeout(timer_obj=timer, token=expected_token, cb=callback):
+            if timer_obj in self._sequence_timers:
+                self._sequence_timers.remove(timer_obj)
+            timer_obj.deleteLater()
+
+            if not self._sequence_running:
+                return
+            if token != self._sequence_callback_token:
+                return
+
+            cb()
+
+        timer.timeout.connect(_on_timeout)
+        self._sequence_timers.append(timer)
+        timer.start(max(0, int(delay_ms)))
+        return timer
+
+    def _schedule_timer(self, delay_ms, callback, track_sequence=False):
+        if track_sequence:
+            return self._schedule_sequence_timer(delay_ms, callback)
+        QtCore.QTimer.singleShot(max(0, int(delay_ms)), callback)
+        return None
 
     def update_sample_volume(self):
         value_text = self.sampleVolumeText.text().strip()
@@ -674,13 +718,14 @@ class PlatformControl(QtWidgets.QWidget):
             return False 
 
         print(
-            f"Wash step running at {wash_flowrate_ml_min} mL/min for {wash_volume_ml:.2f} mL "
+            f"Wash step running at {wash_flowrate_total_ml_min} mL/min for {wash_volume_ml:.2f} mL "
             f"({wash_duration_min:.1f} min)."
         )
         #after wash duration has elapsed, call _finish_wash_step 
-        QtCore.QTimer.singleShot( 
+        self._schedule_timer(
             wash_duration_ms,
             lambda pumps=active_pumps, callback=on_complete: self._finish_wash_step(pumps, callback),
+            track_sequence=True,
         )
         return True
 
@@ -701,7 +746,7 @@ class PlatformControl(QtWidgets.QWidget):
 
 
 
-    def fractioncollector_sample(self, sample_id, on_complete=None):
+    def fractioncollector_sample(self, sample_id, on_complete=None, track_sequence_timer=False):
         """Trigger fraction collector to take a sample and mark the sample point in platform monitor.
         
         Args:
@@ -735,13 +780,14 @@ class PlatformControl(QtWidgets.QWidget):
         ):
             return False
 
-        QtCore.QTimer.singleShot( #schedules the collection to start after 1 second
+        self._schedule_timer( #schedules the collection to start after 1 second
             1000,
-            lambda sid=sample_id, flow=total_flow_ml_min, callback=on_complete: self._start_fractioncollector_collection(sid, flow, callback),
+            lambda sid=sample_id, flow=total_flow_ml_min, callback=on_complete, track=track_sequence_timer: self._start_fractioncollector_collection(sid, flow, callback, track),
+            track_sequence=track_sequence_timer,
         )
         return True
 
-    def _start_fractioncollector_collection(self, sample_id, total_flow_ml_min, on_complete=None): #called after 1 second delay from fractioncollector_sample, starts the sample collection and schedules the stop collection after the calculated sample duration has elapsed
+    def _start_fractioncollector_collection(self, sample_id, total_flow_ml_min, on_complete=None, track_sequence_timer=False): #called after 1 second delay from fractioncollector_sample, starts the sample collection and schedules the stop collection after the calculated sample duration has elapsed
         if not self.connect_fraction_collector():
             if callable(on_complete):
                 on_complete() # check if on_complete is a callable function before calling it to avoid errors, then return to abort sampling since we failed to connect to the fraction collector
@@ -758,9 +804,10 @@ class PlatformControl(QtWidgets.QWidget):
         print(f"Starting sample collection for {self.sample_duration:.1f} s.")
 
         duration_ms = max(0, int(self.sample_duration * 1000)) #after a delay of the sample duration, send a signal to stop sample collection
-        QtCore.QTimer.singleShot(
+        self._schedule_timer(
             duration_ms,
             lambda sid=sample_id, flow=total_flow_ml_min, callback=on_complete: self._finish_fractioncollector_collection(sid, flow, callback),
+            track_sequence=track_sequence_timer,
         )
 
     def _finish_fractioncollector_collection(self, sample_id, total_flow_ml_min, on_complete=None):
@@ -822,7 +869,7 @@ class PlatformControl(QtWidgets.QWidget):
     def _poll_temp_and_handle_row(self): #checks if we have reached target temperature yet, if not, waits 2 seconds and checks again
         current_temp_text = self.thermocontroller.currentTempDisplay.text().strip()
         if not self.temp_reached(current_temp_text):
-            QtCore.QTimer.singleShot(2000, self._poll_temp_and_handle_row)
+            self._schedule_timer(2000, self._poll_temp_and_handle_row, track_sequence=True)
             return
 
         print("Target temperature reached. Starting wash step.") #once reached, start wash step
@@ -848,7 +895,7 @@ class PlatformControl(QtWidgets.QWidget):
             f"Row hold started at total flow {total_flow_ml_min:.3f} mL/min for "
             f"{hold_volume_ml:.2f} mL ({hold_duration_s:.1f} s) (reactor volume x3 + delay volume included)."
         )
-        QtCore.QTimer.singleShot(hold_duration_ms, self._on_row_complete)
+        self._schedule_timer(hold_duration_ms, self._on_row_complete, track_sequence=True)
 
     def _on_row_complete(self):
         current_row = getattr(self, "_sequence_row_index", 0)
@@ -862,10 +909,12 @@ class PlatformControl(QtWidgets.QWidget):
         sample_id = f"row-{current_row + 1}-sample-{sample_number}"
         started = self.fractioncollector_sample(
             sample_id,
-            on_complete=lambda row=current_row, sample=sample_number: QtCore.QTimer.singleShot(
+            on_complete=lambda row=current_row, sample=sample_number: self._schedule_timer(
                 1000, #delay the next sample collection by 1 second
                 lambda r=row, s=sample: self._after_row_sample(r, s),
+                track_sequence=True,
             ),
+            track_sequence_timer=True,
         )
         if not started:
             self._advance_sequence_after_sample(current_row)
@@ -928,6 +977,9 @@ class PlatformControl(QtWidgets.QWidget):
 
     def run_sequence(self): 
         """Run full sequence non-blocking, row-by-row."""
+        self._invalidate_sequence_callbacks()
+        self._cancel_sequence_timers()
+
         self._sequence_df = self.get_sequence_targets_df() # extract df from table 
         if self._sequence_df.empty:
             print(f"[{time.strftime('%H:%M:%S')}] reactor_sequence is empty.")
@@ -948,6 +1000,8 @@ class PlatformControl(QtWidgets.QWidget):
         """Stop the running sequence, set all pumps to 0.1 mL/min, and reset the auto sampler."""
         # Stop the sequence
         self._sequence_running = False
+        self._invalidate_sequence_callbacks()
+        self._cancel_sequence_timers()
         print(f"[{time.strftime('%H:%M:%S')}] Sequence stopped.")
 
         # Set all pumps to 0.1 mL/min and stop them
