@@ -513,6 +513,7 @@ class PlatformControl(QtWidgets.QWidget):
                 "name": pump_widget.nameEdit.text().strip(),
                 "model": pump_widget.pumpModelCombo.currentText(),
                 "com_port": pump_widget.comPort.currentText(),
+                "calibration_factor": pump_widget.calibrationFactorText.text().strip() if hasattr(pump_widget, "calibrationFactorText") else "1",
             })
 
         valves = []
@@ -563,6 +564,8 @@ class PlatformControl(QtWidgets.QWidget):
             self._set_combo_text(pump_widget.pumpModelCombo, pump_data.get("model"))
             pump_widget.formatWidget(pump_widget.pumpModelCombo.currentText())
             self._set_combo_text(pump_widget.comPort, pump_data.get("com_port"))
+            if hasattr(pump_widget, "calibrationFactorText"):
+                pump_widget.calibrationFactorText.setText(str(pump_data.get("calibration_factor", "1") or "1"))
 
         for valve_data in data.get("valves", []):
             self.add_valve()

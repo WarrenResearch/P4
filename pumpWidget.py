@@ -50,6 +50,14 @@ class PumpControl(QtWidgets.QWidget):
         self.setFlowrateText.setFixedSize(75, 20)
         self.setFlowrateText.setHidden(True)
 
+        self.calibrationFactorLabel = QtWidgets.QLabel("Calibration factor:")
+        self.calibrationFactorLabel.setFixedSize(120, 20)
+        self.calibrationFactorLabel.setHidden(True)
+        self.calibrationFactorText = QtWidgets.QLineEdit(self)
+        self.calibrationFactorText.setFixedSize(75, 20)
+        self.calibrationFactorText.setText("1")
+        self.calibrationFactorText.setHidden(True)
+
         self.setSyrSizeLabel = QtWidgets.QLabel('Syringe size [mL]')
         self.setSyrSizeLabel.setFixedSize(100, 30)
         self.setSyrSizeLabel.setHidden(True)
@@ -149,12 +157,14 @@ class PumpControl(QtWidgets.QWidget):
         self.grid.addWidget(self.setFlowrateText, 11, 0)
         self.grid.addWidget(self.setFlowrateText_1, 11, 0, 1, 2)
         self.grid.addWidget(self.setFlowrateText_2, 11, 4, 1, 2)
-        self.grid.addWidget(self.pumpStartButton, 12, 0)
-        self.grid.addWidget(self.pumpStartButton_1, 12, 0)
-        self.grid.addWidget(self.pumpStartButton_2, 12, 4)
-        self.grid.addWidget(self.pumpStopButton, 13, 0)
-        self.grid.addWidget(self.pumpStopButton_1, 13, 0)
-        self.grid.addWidget(self.pumpStopButton_2, 13, 4)
+        self.grid.addWidget(self.calibrationFactorLabel, 12, 0)
+        self.grid.addWidget(self.calibrationFactorText, 13, 0)
+        self.grid.addWidget(self.pumpStartButton, 14, 0)
+        self.grid.addWidget(self.pumpStartButton_1, 14, 0)
+        self.grid.addWidget(self.pumpStartButton_2, 14, 4)
+        self.grid.addWidget(self.pumpStopButton, 15, 0)
+        self.grid.addWidget(self.pumpStopButton_1, 15, 0)
+        self.grid.addWidget(self.pumpStopButton_2, 15, 4)
         self.grid.setHorizontalSpacing(5)
         self.grid.setVerticalSpacing(5)
         self.grid.setAlignment(QtCore.Qt.AlignCenter)
@@ -175,21 +185,50 @@ class PumpControl(QtWidgets.QWidget):
         name = text.strip() or self._default_name
         self.pumpName = f"{self._name_prefix}{name}"
         self.pumpGroupBox.setTitle(self.pumpName)
+        
+    def _get_requested_flowrate(self):
+        try:
+            flow_text = self.setFlowrateText.text().strip()
+            return float(flow_text) if flow_text else 0.0
+        except (ValueError, AttributeError):
+            return 0.0
+
+    def _get_calibration_factor(self):
+        try:
+            factor_text = self.calibrationFactorText.text().strip()
+            factor = float(factor_text) if factor_text else 1.0
+            if factor <= 0:
+                return 1.0
+            return factor
+        except (ValueError, AttributeError):
+            return 1.0
+
+    def _get_command_flowrate(self):
+        requested_flow = self._get_requested_flowrate()
+        calibration_factor = self._get_calibration_factor()
+        if calibration_factor == 0:
+            return requested_flow
+        return requested_flow / calibration_factor
+
+    def get_target_flowrate(self):
+        return self._get_requested_flowrate()
 
     def formatWidget(self, pump):
         if pump == "Teledyne" or pump == "Jasco PU2080":
             self.resetWidget()
-            self.pumpGroupBox.setMaximumHeight(300)
+            self.pumpGroupBox.setMaximumHeight(340)
             self.pumpGroupBox.setMaximumWidth(200)
             self.comPortLabel.setHidden(False)
             self.comPort.setHidden(False)
             self.setFlowrateLabel.setHidden(False)
             self.setFlowrateText.setHidden(False)
+            self.calibrationFactorLabel.setHidden(False)
+            self.calibrationFactorText.setHidden(False)
             self.pumpStartButton.setHidden(False)
             self.pumpStopButton.setHidden(False)
         elif pump == "MilliGAT LF" or pump == "MilliGAT HF":
             self.resetWidget()
-            self.pumpGroupBox.setMaximumHeight(300)
+            self.pumpGroupBox.setMaximumHeight(340)
             self.pumpGroupBox.setMaximumWidth(200)
             self.comPortLabel.setHidden(False)
             self.comPort.setHidden(False)
@@ -197,16 +236,20 @@ class PumpControl(QtWidgets.QWidget):
             self.pumpAddressText.setHidden(False)
             self.setFlowrateLabel.setHidden(False)
             self.setFlowrateText.setHidden(False)
+            self.calibrationFactorLabel.setHidden(False)
+            self.calibrationFactorText.setHidden(False)
             self.pumpStartButton.setHidden(False)
             self.pumpStopButton.setHidden(False)
         elif pump == "Chemyx Nexus 4000" or pump == "Chemyx Fusion 6000X":
             self.resetWidget()
-            self.pumpGroupBox.setMaximumHeight(350)
+            self.pumpGroupBox.setMaximumHeight(380)
             self.pumpGroupBox.setMaximumWidth(200)
             self.comPortLabel.setHidden(False)
             self.comPort.setHidden(False)
             self.setFlowrateLabel.setHidden(False)
             self.setFlowrateText.setHidden(False)
+            self.calibrationFactorLabel.setHidden(False)
+            self.calibrationFactorText.setHidden(False)
             self.pumpStartButton.setHidden(False)
             self.pumpStopButton.setHidden(False)
             self.setSyrSizeLabel.setHidden(False)
@@ -239,6 +282,8 @@ class PumpControl(QtWidgets.QWidget):
         self.pumpAddressText.setHidden(True)
         self.setFlowrateLabel.setHidden(True)
         self.setFlowrateText.setHidden(True)
+        self.calibrationFactorLabel.setHidden(True)
+        self.calibrationFactorText.setHidden(True)
         self.pumpStartButton.setHidden(True)
         self.pumpStopButton.setHidden(True)
         self.setSyrSizeLabel.setHidden(True)
@@ -311,36 +356,36 @@ class PumpControl(QtWidgets.QWidget):
             print('Pump created: ' + str(self.pumpName))
 
     def setFlowrate(self):
-        flowRate = self.setFlowrateText.text()
+        flowRate = self._get_command_flowrate()
         pumpModel = self.pumpModelCombo.currentText()
         COMPort = self.comPort.currentText()
         try:
             if pumpModel == "Teledyne":
-                self.pumpObj.setFlowrate(flowRate)
-            elif pumpModel == "jasco PU2080":
-                self.pumpObj.set_flow_rate(float(flowRate))
+                self.pumpObj.setFlowrate(str(flowRate))
+            elif pumpModel == "Jasco PU2080":
+                self.pumpObj.set_flow(flowRate)
             elif pumpModel == 'MilliGAT HF':
-                self.pumpObj.set_flow_rate(float(flowRate), pump_type='HF')
+                self.pumpObj.set_flow_rate(flowRate, pump_type='HF')
             elif pumpModel == "MilliGAT LF":
-                self.pumpObj.set_flow_rate(float(flowRate), pump_type="LF")
+                self.pumpObj.set_flow_rate(flowRate, pump_type='LF')
             elif pumpModel == 'Chemyx Fusion 6000X':
-                self.pumpObj.setRate(rate=flowRate, x=0)
+                self.pumpObj.setRate(rate=str(flowRate), x=0)
         except:
             print('No pump connected')
 
     def start(self):
-        flowRate = self.setFlowrateText.text()
+        flowRate = self._get_command_flowrate()
         pumpModel = self.pumpModelCombo.currentText()
         COMPort = self.comPort.currentText()
         if pumpModel == "Teledyne":
             self.pumpObj.start()
         elif pumpModel == "Jasco PU2080":
-            self.pumpObj.set_flow(float(flowRate))
+            self.pumpObj.set_flow(flowRate)
             self.pumpObj.start()
         elif pumpModel == "MilliGAT HF":
-            self.pumpObj.set_flow_rate(float(flowRate), pump_type='HF') # No 'start' command for MilliGAT, starts when a flow rate is sent, so send flow rate in current text field
+            self.pumpObj.set_flow_rate(flowRate, pump_type='HF') # No 'start' command for MilliGAT, starts when a flow rate is sent, so send flow rate in current text field
         elif pumpModel == "MilliGAT LF":
-            self.pumpObj.set_flow_rate(float(flowRate), pump_type='LF') 
+            self.pumpObj.set_flow_rate(flowRate, pump_type='LF') 
         elif pumpModel == "Chemyx Fusion 6000X":
             self.pumpObj.startPump()
         else:

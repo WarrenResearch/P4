@@ -248,9 +248,8 @@ class PlatformMonitor(QtWidgets.QWidget):
             
             self._pump_pressure_series[pump_name].append(pressure_val)
             
-            # Apply correction factor to flow for display
-            corrected_flow = flow_val * self.correction_factors[pump_name] if not math.isnan(flow_val) else float('NaN')
-            self._pump_flow_series[pump_name].append(corrected_flow)
+            # Plot the requested flow value so the graph reflects the process target.
+            self._pump_flow_series[pump_name].append(flow_val)
             
             if not math.isnan(flow_val):
                 cumulative_flow += flow_val
@@ -336,7 +335,11 @@ class PlatformMonitor(QtWidgets.QWidget):
             
             # Read flow
             try:
-                flow_result = pump_widget.read_flow()
+                flow_reader = getattr(pump_widget, "get_target_flowrate", None)
+                if callable(flow_reader):
+                    flow_result = flow_reader()
+                else:
+                    flow_result = pump_widget.read_flow()
                 pump_flows[pump_name] = float(flow_result or 0.0)
             except Exception as e:
                 print(f"[Warning] Failed to read flow from {pump_name}: {type(e).__name__}: {e}")
@@ -362,7 +365,7 @@ class PlatformMonitor(QtWidgets.QWidget):
         for pump_name in self.pump_names: # flow loop over pump variables in pump_names list
             flow_val = pump_flows.get(pump_name, float('NaN'))
             try:
-                corrected = flow_val * self.correction_factors[pump_name] if not math.isnan(flow_val) else float('NaN') # apply correction factor to raw flow value, if flow_val is NaN then corrected is also set to NaN to avoid propagating invalid data through calculations and plots.
+                corrected = flow_val if not math.isnan(flow_val) else float('NaN') # store the requested flow directly for logs and downstream calculations.
             except (TypeError, ValueError):
                 corrected = float('NaN')
             corrected_flows[pump_name] = corrected
