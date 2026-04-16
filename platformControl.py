@@ -648,7 +648,8 @@ class PlatformControl(QtWidgets.QWidget):
         return current_temp == target_temp # return True if current temperature equals target temperature, otherwise return False to indicate target has not been reached yet
     
     def wash_step(self, on_complete=None): # runs solution through at 1 mol min
-        wash_flowrate_ml_min = 1.0 
+        wash_flowrate_total_ml_min = 1.0
+        wash_flowrate_ml_min = wash_flowrate_total_ml_min / len(self.pump_widgets) if self.pump_widgets else 0.0 # divide total wash flowrate by number of pumps to get individual pump flowrate, if there are no pumps set flowrate to 0 to avoid division by zero 
         wash_volume_ml = 1.5 * float(self.reactor_volume_ml)
         wash_duration_s = (wash_volume_ml / wash_flowrate_ml_min) * 60.0
         wash_duration_min = wash_duration_s / 60.0
