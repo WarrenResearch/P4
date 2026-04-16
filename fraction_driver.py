@@ -79,7 +79,7 @@ class AzuraFC61:
     
     def position(self):
         """Returns the current position of the needle"""
-        output = self._send_command("get_status")
+        output = self.get_status()
         parts = output.replace("STATUS:","").split(",")
         position = parts[7]
         return position
