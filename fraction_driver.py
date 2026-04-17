@@ -81,5 +81,5 @@ class AzuraFC61:
         """Returns the current position of the needle"""
         output = self.get_status()
         parts = output.replace("STATUS:","").split(",")
-        position = parts[7]
+        position = parts[10]
         return position
