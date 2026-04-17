@@ -144,7 +144,7 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractionMovePositionLabel = QtWidgets.QLabel("Move position")
         self.fractionMovePositionText = QtWidgets.QLineEdit("A1")
         self.fractionMoveButton = QtWidgets.QPushButton("Move to Position")
-        self.fractionResetButton = QtWidgets.QPushButton("Reset (A1)")
+        self.fractionResetButton = QtWidgets.QPushButton("Reset (HOME)")
         self.fractionNextPositionButton = QtWidgets.QPushButton("Move to Next Position")
 
         self.sampleVolumeLabel = QtWidgets.QLabel("Sample Volume (ml)")
@@ -253,6 +253,7 @@ class PlatformControl(QtWidgets.QWidget):
             headers.append("(pump) [mL/min]")
 
         headers.append("Temperature [°C]")
+        headers.append("Fraction Collector Position")
         return headers
 
     def refresh_target_columns(self):
@@ -424,7 +425,7 @@ class PlatformControl(QtWidgets.QWidget):
                 print(f"[{time.strftime('%H:%M:%S')}] Failed to move fraction collector to {position}: {error}")
 
     def reset_fraction_collector(self):
-        self.fractionMovePositionText.setText("A1")
+        self.fractionMovePositionText.setText("HOME")
         self.move_fraction_collector()
 
     def _set_combo_text(self, combo, value):
@@ -816,6 +817,8 @@ class PlatformControl(QtWidgets.QWidget):
                 on_complete()
             return
 
+        
+
         if not self._retry_fraction_collector_command(
             "stop sample collection",
             lambda: self.fractioncollector.set_collect(0),
@@ -824,15 +827,34 @@ class PlatformControl(QtWidgets.QWidget):
         else:
             print(f"Sample taken: {sample_id}")
 
+        current_position = self.fractioncollector.position()
+
         if self.main is not None and hasattr(self.main, "platform_monitor"): # stamp the sample event on platform monitor 
             event_text = (
                 f"SAMPLE_TAKEN;id={sample_id};"
-                f"volume_ml={self.sample_volume:.3f}"
+                f"volume_ml={self.sample_volume:.3f};"
+                f"fraction_collector_position={current_position}"
             )
             try:
                 self.main.platform_monitor.continuous_log_function(event=event_text)
             except Exception as error:
                 print(f"Failed to log sample event in platform monitor: {error}")
+
+        # Capture the current fraction collector position and populate the table
+        try:
+            print(f"[{time.strftime('%H:%M:%S')}] Fraction collector position at sample: {current_position}")
+            # Update the table cell for the current row's Fraction Collector Position column
+            current_row = getattr(self, "_sequence_row_index", 0)
+            col_index = None
+            for col in range(self.targetsTable.columnCount()):
+                header_item = self.targetsTable.horizontalHeaderItem(col)
+                if header_item and header_item.text() == "Fraction Collector Position":
+                    col_index = col
+                    break
+            if col_index is not None:
+                self.targetsTable.setItem(current_row, col_index, QtWidgets.QTableWidgetItem(str(current_position)))
+        except Exception as error:
+            print(f"Failed to capture fraction collector position: {error}")
 
         if callable(on_complete):
             on_complete()
@@ -1019,11 +1041,11 @@ class PlatformControl(QtWidgets.QWidget):
                 pump_name = pump_widget.nameEdit.text().strip() or "Unnamed pump"
                 print(f"[{time.strftime('%H:%M:%S')}] Failed to stop {pump_name}: {error}")
 
-        # Reset the fraction collector to position A1
+        # Reset the fraction collector to HOME
         try:
             if self._is_fraction_collector_connected():
                 self.reset_fraction_collector()
-                print(f"[{time.strftime('%H:%M:%S')}] Fraction collector reset to A1.")
+                print(f"[{time.strftime('%H:%M:%S')}] Fraction collector reset to HOME.")
             else:
                 print(f"[{time.strftime('%H:%M:%S')}] Fraction collector not connected.")
         except Exception as error:
