@@ -948,11 +948,17 @@ class PlatformControl(QtWidgets.QWidget):
 
         self._advance_sequence_after_sample(current_row)
 
+    def _handle_sequence_complete(self):
+        if not getattr(self, "_sequence_running", False):
+            return
+
+        print(f"[{time.strftime('%H:%M:%S')}] Sequence complete.")
+        self.stop_sequence()
+
     def _advance_sequence_after_sample(self, current_row): #after sample collection is triggered for the current row, advance to the next row and start the process again. If we have reached the end of the sequence, stop running.
         self._sequence_row_index = current_row + 1
         if self._sequence_row_index >= len(self._sequence_df):
-            print(f"[{time.strftime('%H:%M:%S')}] Sequence complete.")
-            self._sequence_running = False
+            self._handle_sequence_complete()
             return
 
         self._run_current_row()
@@ -962,8 +968,7 @@ class PlatformControl(QtWidgets.QWidget):
             return
 
         if self._sequence_row_index >= len(self._sequence_df):
-            print(f"[{time.strftime('%H:%M:%S')}] Sequence complete.")
-            self._sequence_running = False
+            self._handle_sequence_complete()
             return
 
         row_data = self._sequence_df.iloc[self._sequence_row_index].to_dict()
@@ -1019,12 +1024,20 @@ class PlatformControl(QtWidgets.QWidget):
         return True
 
     def stop_sequence(self):
-        """Stop the running sequence, set all pumps to 0.1 mL/min, and reset the auto sampler."""
+        """Stop the running sequence, set all pumps to 0.1 mL/min, reset the auto sampler, set temperature to 25.0 C."""
         # Stop the sequence
         self._sequence_running = False
         self._invalidate_sequence_callbacks()
         self._cancel_sequence_timers()
         print(f"[{time.strftime('%H:%M:%S')}] Sequence stopped.")
+        # Set temperature to 25.0 C
+        try:
+            self.thermocontroller.targetTempText.setText("25.0")
+            self.thermocontroller.setTargetTemperature()
+            print(f"[{time.strftime('%H:%M:%S')}] Temperature set to 25.0 C.")
+        except Exception as error:
+            print(f"[{time.strftime('%H:%M:%S')}] Failed to set temperature: {error}")
+
 
         # Set all pumps to 0.1 mL/min and stop them
         for pump_widget in self.pump_widgets:
@@ -1050,5 +1063,6 @@ class PlatformControl(QtWidgets.QWidget):
                 print(f"[{time.strftime('%H:%M:%S')}] Fraction collector not connected.")
         except Exception as error:
             print(f"[{time.strftime('%H:%M:%S')}] Failed to reset fraction collector: {error}")
-
+    
+        
         print(f"[{time.strftime('%H:%M:%S')}] Sequence stop complete.")
