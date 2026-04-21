@@ -9,17 +9,13 @@ from sequence_manager import SequenceExecutor
 from fraction_collector_handler import FractionCollectorHandler
 from platform_config import PlatformConfigHandler
 
-### Class used to define all apparatus available for automated experiments ###
-
-# All pumps and valves are controlled from other scripts by calling to the same instance of the PlatformControl class created in the GUI initialisation.
-
 class PlatformControl(QtWidgets.QWidget):
     def __init__(self, parent, main):
         super(PlatformControl, self).__init__(parent)
 
-        self.fractioncollector = fd.AzuraFC61() # single Azura device used for both fraction collection and sampling
+        self.fractioncollector = fd.AzuraFC61()
 
-        self.fraction_delay_volume_ml = 0.556 # volume between reactor and fraction collector outlet 
+        self.fraction_delay_volume_ml = 0.556
 
         self.main = main
         self._layout = QtWidgets.QGridLayout()
@@ -62,9 +58,6 @@ class PlatformControl(QtWidgets.QWidget):
         self.savePlatformButton.clicked.connect(self.save_platform)
         self.loadPlatformButton.clicked.connect(self.load_platform)
         self.setConfigButton.clicked.connect(self.set_monitor_configuration)
-
-
-######################################## Valves ########################################
         self.valvesBox = QtWidgets.QGroupBox("Valves")
         self.valvesBox.setMaximumHeight(400)
         self.valvesBox.setMaximumWidth(1400)
@@ -85,8 +78,6 @@ class PlatformControl(QtWidgets.QWidget):
         self.valve_count = 0
         self.valve_columns = 4
         self.addValveButton.clicked.connect(self.add_valve)
-
-######################################## Thermocontroller ########################################
         self.thermocontrollerBox = QtWidgets.QGroupBox("Thermocontroller")
         self.thermocontrollerBox.setMaximumHeight(400)
         self.thermocontrollerBox.setMaximumWidth(300)
@@ -95,7 +86,6 @@ class PlatformControl(QtWidgets.QWidget):
         self.thermocontrollerBoxLayout.addWidget(self.thermocontroller)
         self._layout.addWidget(self.thermocontrollerBox, 0, 2, 1, 1, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
 
-    ######################################## Sequence targets ########################################
         self.sequenceTargetsBox = QtWidgets.QGroupBox("Reactor Sequence")
         self.sequenceTargetsBox.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.sequenceTargetsBoxLayout = QtWidgets.QVBoxLayout(self.sequenceTargetsBox)
@@ -132,7 +122,6 @@ class PlatformControl(QtWidgets.QWidget):
         self.refresh_target_columns()
         self.sequence_targets_df = self.get_sequence_targets_df()
         self.targetsTable.itemChanged.connect(self._on_targets_table_changed)
-######################################## Fraction Collector ########################################
         self.fractioncollectorBox = QtWidgets.QGroupBox("Fraction Collector")
         self.fractioncollectorBox.setMaximumHeight(400)
         self.fractioncollectorBox.setMaximumWidth(300)
@@ -149,19 +138,19 @@ class PlatformControl(QtWidgets.QWidget):
 
         self.sampleVolumeLabel = QtWidgets.QLabel("Sample Volume (ml)")
         self.sampleVolumeText = QtWidgets.QLineEdit("0.5")
-        self.sample_volume = 0.5 # default sample volume in mL, used if user input is invalid. Updated whenever user edits sample volume text field and valid value is entered.
-        self.sample_duration = 0.0 
-        
-        self.sample_count = 1 #number of samples to be taken
+        self.sample_volume = 0.5
+        self.sample_duration = 0.0
+
+        self.sample_count = 1
         self.sampleCountLabel = QtWidgets.QLabel("Sample count")
         self.sampleCountText = QtWidgets.QLineEdit("1")
 
-        self.reactor_volume_ml = 2 # default reactor volume in mL
+        self.reactor_volume_ml = 2
         self.reactorVolumeLabel = QtWidgets.QLabel("Reactor Volume (ml)")
         self.reactorVolumeText = QtWidgets.QLineEdit("2")
         
     
-        self.fraction_delay_volume_ml = 0.556 # starting delay volume
+        self.fraction_delay_volume_ml = 0.556
         self.fractionDelayVolumeLabel = QtWidgets.QLabel("Delay Volume (ml)")
         self.fractionDelayVolumeText = QtWidgets.QLineEdit("0.556")
         
@@ -293,7 +282,7 @@ class PlatformControl(QtWidgets.QWidget):
 
         rows = []
         for row in range(self.targetsTable.rowCount()):
-            row_data = {} # Use a dict to ensure we can handle changes in column order or count without losing data integrity
+            row_data = {}
             for col, header in enumerate(headers):
                 item = self.targetsTable.item(row, col)
                 row_data[header] = item.text() if item else ""
@@ -358,10 +347,8 @@ class PlatformControl(QtWidgets.QWidget):
     def _retry_fraction_collector_command(self, command_name, command_callback):
         return self.fraction_handler._retry_fraction_collector_command(command_name, command_callback)
 
-
     def disconnect_fraction_collector(self):
         return self.fraction_handler.disconnect_fraction_collector()
-
 
     def move_to_next_position(self):
         return self.fraction_handler.move_to_next_position()
@@ -503,52 +490,42 @@ class PlatformControl(QtWidgets.QWidget):
 
 ########### Methods for running sequences and controlling fractioncollector ###########
     def set_monitor_configuration(self):
-        """Trigger platform monitor to load pump configuration."""
-        if self.main is None or not hasattr(self.main, 'platform_monitor'): #if the window cant be found, throw an error message and return
+        if self.main is None or not hasattr(self.main, 'platform_monitor'):
             QtWidgets.QMessageBox.warning(self, "Error", "Platform Monitor not available.")
-            return #returns early to avoid calling method on non-existent monitor
-        
-        # Call the set_configuration method on platform_monitor
-        if hasattr(self.main.platform_monitor, 'set_configuration'): #if the method exists, call it to update the monitor configuration based on current pumps
+            return
+
+        if hasattr(self.main.platform_monitor, 'set_configuration'):
             self.main.platform_monitor.set_configuration()
         else:
             QtWidgets.QMessageBox.warning(self, "Error", "Platform Monitor configuration method not found.")
 
 
     def temp_reached(self, temperature):
-        """Check if target temperature is reached.
-        
-        Args:
-            temperature: Current temperature reading.
-            
-        Returns:
-            True if target temperature equals current temperature, False otherwise.
-        """
         try:
-            target_temp_str = self.thermocontroller.targetTempText.text().strip() # get the target temperature from the thermocontroller widget as a string
+            target_temp_str = self.thermocontroller.targetTempText.text().strip()
             if not target_temp_str:
                 return False
-            target_temp = float(target_temp_str) #convert the string into a float (new variable target_temp) for comparison with current temperature
-        except (ValueError, AttributeError): # except if an error is thrown
+            target_temp = float(target_temp_str)
+        except (ValueError, AttributeError):
             return False
         
         try:
-            current_temp = float(temperature) # convert the input temperature (current temperature reading) into a float for comparison with target temperature
+            current_temp = float(temperature)
         except (ValueError, TypeError):
             return False
         
-        return current_temp == target_temp # return True if current temperature equals target temperature, otherwise return False to indicate target has not been reached yet
+        return current_temp == target_temp
     
     def fractioncollector_sample(self, sample_id, on_complete=None, track_sequence_timer=False):
         return self.fraction_handler.fractioncollector_sample(sample_id, on_complete, track_sequence_timer)
 
-    def _start_fractioncollector_collection(self, sample_id, total_flow_ml_min, on_complete=None, track_sequence_timer=False): #called after 1 second delay from fractioncollector_sample, starts the sample collection and schedules the stop collection after the calculated sample duration has elapsed
+    def _start_fractioncollector_collection(self, sample_id, total_flow_ml_min, on_complete=None, track_sequence_timer=False):
         return self.fraction_handler._start_fractioncollector_collection(sample_id, total_flow_ml_min, on_complete, track_sequence_timer)
 
     def _finish_fractioncollector_collection(self, sample_id, total_flow_ml_min, on_complete=None):
         return self.fraction_handler._finish_fractioncollector_collection(sample_id, total_flow_ml_min, on_complete)
 
-    def _apply_row_flowrates(self, row_data): #set flowrates for each pump based on the row  (flow_column) values
+    def _apply_row_flowrates(self, row_data):
         total_flow_ml_min = 0.0
         for pump_widget in self.pump_widgets:
             if not hasattr(pump_widget, "pumpObj"):
@@ -577,10 +554,8 @@ class PlatformControl(QtWidgets.QWidget):
 
         return total_flow_ml_min
 
-    def run_sequence(self): 
-        """Run full sequence non-blocking, row-by-row."""
+    def run_sequence(self):
         return self.sequence_executor.run_sequence()
 
     def stop_sequence(self):
-        """Stop the running sequence, set all pumps to 0.1 mL/min, reset the auto sampler, set temperature to 25.0 C."""
         return self.sequence_executor.stop_sequence()
