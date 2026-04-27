@@ -1030,6 +1030,22 @@ class PlatformControl(QtWidgets.QWidget):
         self._invalidate_sequence_callbacks()
         self._cancel_sequence_timers()
         print(f"[{time.strftime('%H:%M:%S')}] Sequence stopped.")
+
+
+
+
+
+        log_dir = "Sequence_logs"
+        if not os.path.isdir(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+
+        log_path = os.path.join(log_dir, f"Sequence_log_{self.start_time_str}.csv")
+        try:
+            self._sequence_df.to_csv(log_path, index=False)
+            print(f"[{time.strftime('%H:%M:%S')}] Sequence log saved to {log_path}")
+        except Exception as error:
+            print(f"[{time.strftime('%H:%M:%S')}] Failed to save sequence log: {error}")
+
         # Set temperature to 25.0 C
         try:
             self.thermocontroller.targetTempText.setText("25.0")
