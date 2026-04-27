@@ -1,24 +1,18 @@
 {
   "pumps": [
     {
-      "name": "Pump 1 - diox",
+      "name": "Pump 1",
       "model": "Jasco PU2080",
       "com_port": "COM9",
-      "calibration_factor": "0.9993"
-    },
-    {
-      "name": "Pump 2 - 2oa",
-      "model": "Jasco PU2080",
-      "com_port": "COM8",
-      "calibration_factor": "0.923"
+      "calibration_factor": "0.9857"
     }
   ],
   "valves": [],
   "thermocontroller": {
     "name": "Eurotherm 3216",
     "com_port": "COM7",
-    "target_temp": "25"
+    "target_temp": "60"
   },
-  "reactor_volume_ml": 1.0,
-  "fraction_delay_volume_ml": 0.0
+  "reactor_volume_ml": 2,
+  "fraction_delay_volume_ml": 0.556
 }
