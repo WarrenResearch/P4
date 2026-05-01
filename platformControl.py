@@ -8,6 +8,9 @@ import time
 from sequence_manager import SequenceExecutor
 from fraction_collector_handler import FractionCollectorHandler
 from platform_config import PlatformConfigHandler
+import os 
+import platform_monitor
+import datetime
 
 class PlatformControl(QtWidgets.QWidget):
     def __init__(self, parent, main):
@@ -18,6 +21,8 @@ class PlatformControl(QtWidgets.QWidget):
         self.fraction_delay_volume_ml = 0.556
 
         self.main = main
+        # start_time_str can be sourced from Platform Monitor when available
+        self.start_time_str = None
         self._layout = QtWidgets.QGridLayout()
         self.setLayout(self._layout)
         self._layout.setHorizontalSpacing(0)
@@ -247,6 +252,28 @@ class PlatformControl(QtWidgets.QWidget):
         headers.append("Temperature [°C]")
         headers.append("Fraction Collector Position")
         return headers
+
+    def _get_monitor_start_time_str(self):
+        """Return the start_time_str from the Platform Monitor when available.
+
+        Falls back to a locally cached `self.start_time_str` or generates a new
+        timestamp if none exists.
+        """
+        # Prefer monitor value if accessible
+        try:
+            if self.main is not None and hasattr(self.main, 'platform_monitor'):
+                pm = self.main.platform_monitor
+                if pm is not None and hasattr(pm, 'start_time_str') and pm.start_time_str:
+                    return pm.start_time_str
+        except Exception:
+            pass
+
+        # Fallback: use existing local value or create one
+        if getattr(self, 'start_time_str', None):
+            return self.start_time_str
+
+        self.start_time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        return self.start_time_str
 
     def refresh_target_columns(self):
         old_headers = []
@@ -573,7 +600,8 @@ class PlatformControl(QtWidgets.QWidget):
         if not os.path.isdir(log_dir):
             os.makedirs(log_dir, exist_ok=True)
 
-        log_path = os.path.join(log_dir, f"Sequence_log_{self.start_time_str}.csv")
+        start_time_for_log = self._get_monitor_start_time_str()
+        log_path = os.path.join(log_dir, f"Sequence_log_{start_time_for_log}.csv")
         try:
             self._sequence_df.to_csv(log_path, index=False)
             print(f"[{time.strftime('%H:%M:%S')}] Sequence log saved to {log_path}")
