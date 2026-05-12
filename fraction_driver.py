@@ -83,3 +83,11 @@ class AzuraFC61:
         parts = output.replace("STATUS:","").split(",")
         position = parts[10]
         return position
+    
+    def drop_count(self):
+        """Returns the current drop count"""
+        output = self.get_status()
+        parts = output.replace("STATUS:","").split(",")
+        drop_sensor_state = parts[12]
+        drop_count = parts[13]
+        return drop_sensor_state, drop_count
