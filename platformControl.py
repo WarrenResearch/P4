@@ -140,6 +140,7 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractionMoveButton = QtWidgets.QPushButton("Move to Position")
         self.fractionResetButton = QtWidgets.QPushButton("Reset (HOME)")
         self.fractionNextPositionButton = QtWidgets.QPushButton("Move to Next Position")
+        self.fractionCleanButton = QtWidgets.QPushButton("Clean Dead Volume")
 
         self.sampleVolumeLabel = QtWidgets.QLabel("Sample Volume (ml)")
         self.sampleVolumeText = QtWidgets.QLineEdit("0.5")
@@ -175,6 +176,7 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractioncollectorBoxLayout.addWidget(self.reactorVolumeText)
         self.fractioncollectorBoxLayout.addWidget(self.fractionDelayVolumeLabel)
         self.fractioncollectorBoxLayout.addWidget(self.fractionDelayVolumeText)
+        self.fractioncollectorBoxLayout.addWidget(self.fractionCleanButton)
         self.fractioncollectorBoxLayout.addStretch(1)
 
 

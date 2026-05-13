@@ -233,3 +233,30 @@ class FractionCollectorHandler:
         # Notify caller that sample cycle is complete.
         if callable(on_complete):
             on_complete()
+
+    def clean_dead_volume(self): # this method will be called before each sample collection to ensure the dead volume of the fraction collector is cleaned and does not contaminate the next sample. 
+
+        controller_dead_volume = 0.05 * 3  # mL, dead volume of knauer FC61 * 3 (safety factor to ensure full cleaning)
+        try:
+            self.controller.fractioncollector.move('W') # moves the head to the waste (W) position (other options are X,Y,Z for waste bottles)
+        except Exception as error:
+            print(f"[{time.strftime('%H:%M:%S')}] Failed to move fraction collector to waste position: {error}")
+
+        # wait two seconds to make sure movement has finished before starting collection
+        self.controller._schedule_timer(2000, lambda: self.controller.fractioncollector.set_collect(1))
+
+        flowrate = self.controller._get_total_current_flowrate_ml_min()
+
+        clean_duration_ms = max(0, int((controller_dead_volume / flowrate) * 60 * 1000)) if flowrate > 0 else 0
+
+        print(f"Cleaning dead volume: {controller_dead_volume:.3f} mL")
+
+        self.controller._schedule_timer(clean_duration_ms, lambda: self.controller.fractioncollector.set_collect(0),self.controller.fractioncollector.move('HOME'))
+
+
+
+
+
+
+
+
