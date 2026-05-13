@@ -281,9 +281,14 @@ class FractionCollectorHandler:
                     self.controller.fractioncollector.move_to_vial(current_arm_position)
                 except Exception as error:
                     print(f"[{time.strftime('%H:%M:%S')}] Failed to return fraction collector to original position: {error}")
+                    return
 
-                if callable(on_complete):
-                    on_complete()
+                def _continue_after_return():
+                    if callable(on_complete):
+                        on_complete()
+
+                # Give the arm a moment to settle at its original position before advancing.
+                self.controller._schedule_timer(2000, _continue_after_return)
 
             self.controller._schedule_timer(clean_duration_ms, _stop_cleaning_and_return_position)
 
