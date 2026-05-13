@@ -271,7 +271,7 @@ class FractionCollectorHandler:
                 print(f"[{time.strftime('%H:%M:%S')}] Failed to start dead volume cleaning: {error}")
                 return
 
-            def _stop_cleaning_and_home():
+            def _stop_cleaning_and_return_position():
                 try:
                     self.controller.fractioncollector.set_collect(0)
                 except Exception as error:
@@ -280,12 +280,12 @@ class FractionCollectorHandler:
                 try:
                     self.controller.fractioncollector.move_to_vial(current_arm_position)
                 except Exception as error:
-                    print(f"[{time.strftime('%H:%M:%S')}] Failed to return fraction collector home: {error}")
+                    print(f"[{time.strftime('%H:%M:%S')}] Failed to return fraction collector to original position: {error}")
 
                 if callable(on_complete):
                     on_complete()
 
-            self.controller._schedule_timer(clean_duration_ms, _stop_cleaning_and_home)
+            self.controller._schedule_timer(clean_duration_ms, _stop_cleaning_and_return_position)
 
         # Wait for the move to waste to finish before starting the flush.
         self.controller._schedule_timer(2000, _start_cleaning)
