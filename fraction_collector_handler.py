@@ -136,19 +136,24 @@ class FractionCollectorHandler:
         if not self.connect_fraction_collector():
             return False
 
-        # Move to the next vial with reconnect+retry support.
-        if not self._retry_fraction_collector_command(
-            "move fraction collector to next vial",
-            lambda: self.controller.fractioncollector.move_next(collect_mode=0),
-        ):
+        def _start_sample_after_cleaning():
+            # Move to the next vial with reconnect+retry support.
+            if not self._retry_fraction_collector_command(
+                "move fraction collector to next vial",
+                lambda: self.controller.fractioncollector.move_next(collect_mode=0),
+            ):
+                return
+
+            # Delay one second, then start collection.
+            self.controller._schedule_timer(
+                1000,
+                lambda sid=sample_id, flow=total_flow_ml_min, callback=on_complete, track=track_sequence_timer: self._start_fractioncollector_collection(sid, flow, callback, track),
+                track_sequence=track_sequence_timer,
+            )
+
+        if not self.clean_dead_volume(on_complete=_start_sample_after_cleaning):
             return False
 
-        # Delay one second, then start collection.
-        self.controller._schedule_timer(
-            1000,
-            lambda sid=sample_id, flow=total_flow_ml_min, callback=on_complete, track=track_sequence_timer: self._start_fractioncollector_collection(sid, flow, callback, track),
-            track_sequence=track_sequence_timer,
-        )
         return True
 
     def _start_fractioncollector_collection(self, sample_id, total_flow_ml_min, on_complete=None, track_sequence_timer=False):
@@ -234,24 +239,57 @@ class FractionCollectorHandler:
         if callable(on_complete):
             on_complete()
 
-    def clean_dead_volume(self): # this method will be called before each sample collection to ensure the dead volume of the fraction collector is cleaned and does not contaminate the next sample. 
+    def clean_dead_volume(self, on_complete=None):
+        # Clean the fraction collector dead volume before the next sample.
+        controller_dead_volume = 0.06 * 3  # mL, FC61 dead volume with a safety factor.
+        flowrate = self.controller._get_total_current_flowrate_ml_min()
 
-        controller_dead_volume = 0.05 * 3  # mL, dead volume of knauer FC61 * 3 (safety factor to ensure full cleaning)
+        #needs to find current arm position, and return there once the cleaning is done
+
+        current_arm_position = self.controller.fractioncollector.position()
+
+        print(f"Current flowrate: {flowrate:.3f} mL/min")
+        print(f"Cleaning dead volume: {controller_dead_volume:.3f} mL")
+
+        if flowrate <= 0:
+            print(f"[{time.strftime('%H:%M:%S')}] Cannot clean dead volume: flowrate must be greater than 0 mL/min.")
+            return False
+
+        clean_duration_ms = int((controller_dead_volume / flowrate) * 60 * 1000)
+        print(f"Calculated clean duration: {clean_duration_ms} ms based on flowrate and dead volume.")
+
         try:
-            self.controller.fractioncollector.move('W') # moves the head to the waste (W) position (other options are X,Y,Z for waste bottles)
+            # Move the head to waste before flushing the dead volume.
+            self.controller.fractioncollector.move_to_vial('W')
         except Exception as error:
             print(f"[{time.strftime('%H:%M:%S')}] Failed to move fraction collector to waste position: {error}")
 
-        # wait two seconds to make sure movement has finished before starting collection
-        self.controller._schedule_timer(2000, lambda: self.controller.fractioncollector.set_collect(1))
+        def _start_cleaning():
+            try:
+                self.controller.fractioncollector.set_collect(1)
+            except Exception as error:
+                print(f"[{time.strftime('%H:%M:%S')}] Failed to start dead volume cleaning: {error}")
+                return
 
-        flowrate = self.controller._get_total_current_flowrate_ml_min()
+            def _stop_cleaning_and_home():
+                try:
+                    self.controller.fractioncollector.set_collect(0)
+                except Exception as error:
+                    print(f"[{time.strftime('%H:%M:%S')}] Failed to stop dead volume cleaning: {error}")
 
-        clean_duration_ms = max(0, int((controller_dead_volume / flowrate) * 60 * 1000)) if flowrate > 0 else 0
+                try:
+                    self.controller.fractioncollector.move_to_vial(current_arm_position)
+                except Exception as error:
+                    print(f"[{time.strftime('%H:%M:%S')}] Failed to return fraction collector home: {error}")
 
-        print(f"Cleaning dead volume: {controller_dead_volume:.3f} mL")
+                if callable(on_complete):
+                    on_complete()
 
-        self.controller._schedule_timer(clean_duration_ms, lambda: self.controller.fractioncollector.set_collect(0),self.controller.fractioncollector.move('HOME'))
+            self.controller._schedule_timer(clean_duration_ms, _stop_cleaning_and_home)
+
+        # Wait for the move to waste to finish before starting the flush.
+        self.controller._schedule_timer(2000, _start_cleaning)
+        return True
 
 
 

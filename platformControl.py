@@ -190,6 +190,7 @@ class PlatformControl(QtWidgets.QWidget):
         self.sampleCountText.editingFinished.connect(self.update_sample_count)
         self.reactorVolumeText.editingFinished.connect(self.update_reactor_volume)
         self.fractionDelayVolumeText.editingFinished.connect(self.update_fraction_delay_volume)
+        self.fractionCleanButton.clicked.connect(self.clean_dead_volume)
 
         self._layout.addWidget(self.fractioncollectorBox, 0, 1, 1, 1, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
 
@@ -387,6 +388,9 @@ class PlatformControl(QtWidgets.QWidget):
 
     def reset_fraction_collector(self):
         return self.fraction_handler.reset_fraction_collector()
+    
+    def clean_dead_volume(self, on_complete=None):
+        return self.fraction_handler.clean_dead_volume(on_complete=on_complete)
 
     def _set_combo_text(self, combo, value):
         if not value:
