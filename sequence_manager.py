@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import time
 
@@ -253,6 +254,24 @@ class SequenceExecutor:
         self.controller._invalidate_sequence_callbacks()
         self.controller._cancel_sequence_timers()
         print(f"[{time.strftime('%H:%M:%S')}] Sequence stopped.")
+
+        # Save the active sequence dataframe before shutting hardware down.
+        try:
+            log_dir = "Sequence_logs"
+            os.makedirs(log_dir, exist_ok=True)
+
+            start_time_for_log = self.controller._get_monitor_start_time_str()
+            log_path = os.path.join(log_dir, f"Sequence_log_{start_time_for_log}.csv")
+
+            sequence_df = getattr(self.controller, "_sequence_df", None)
+            if sequence_df is None:
+                sequence_df = self.controller.get_sequence_targets_df()
+
+            sequence_df.to_csv(log_path, index=False)
+            print(f"[{time.strftime('%H:%M:%S')}] Sequence log saved to {log_path}")
+        except Exception as error:
+            print(f"[{time.strftime('%H:%M:%S')}] Failed to save sequence log: {error}")
+
 
         # Reset thermocontroller to 25 C.
         try:
