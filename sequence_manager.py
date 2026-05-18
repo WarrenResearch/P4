@@ -49,7 +49,7 @@ class SequenceExecutor:
             return False
 
         print(
-            f"Wash step running at {wash_flowrate_total_ml_min} mL/min for {wash_volume_ml:.2f} mL "
+            f"[{time.strftime('%H:%M:%S')}] Wash step running at {wash_flowrate_total_ml_min} mL/min for {wash_volume_ml:.2f} mL "
             f"({wash_duration_min:.1f} min)."
         )
 
@@ -72,7 +72,7 @@ class SequenceExecutor:
                 pump_name = pump_widget.nameEdit.text().strip() or "Unnamed pump"
                 print(f"Failed to stop {pump_name} after wash step: {error}")
 
-        print("Wash step complete.")
+        print(f"[{time.strftime('%H:%M:%S')}] Wash step complete.")
 
         # Continue sequence chain if caller provided callback.
         if callable(on_complete):
@@ -88,7 +88,7 @@ class SequenceExecutor:
             return
 
         # Once target reached, begin wash step.
-        print("Target temperature reached. Starting wash step.")
+        print(f"[{time.strftime('%H:%M:%S')}] Target temperature reached. Starting wash step.")
         self.wash_step(on_complete=self._on_wash_complete_for_row)
 
     def _on_wash_complete_for_row(self):
@@ -111,7 +111,7 @@ class SequenceExecutor:
         hold_duration_ms = int(hold_duration_s * 1000)
 
         print(
-            f"Row hold started at total flow {total_flow_ml_min:.3f} mL/min for "
+            f"[{time.strftime('%H:%M:%S')}] Row hold started at total flow {total_flow_ml_min:.3f} mL/min for "
             f"{hold_volume_ml:.2f} mL ({hold_duration_s:.1f} s) (reactor volume x3 + delay volume included)."
         )
 

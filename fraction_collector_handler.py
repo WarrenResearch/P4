@@ -128,7 +128,7 @@ class FractionCollectorHandler:
         # Convert requested sample volume to required sample time in seconds.
         self.controller.sample_duration = (self.controller.sample_volume / total_flow_ml_min) * 60.0
         print(
-            f"Sample duration calculated from volume/flowrate: "
+            f"[{time.strftime('%H:%M:%S')}] Sample duration calculated from volume/flowrate: "
             f"{self.controller.sample_volume:.3f} mL / {total_flow_ml_min:.3f} mL/min = {self.controller.sample_duration:.1f} s"
         )
 
@@ -172,7 +172,7 @@ class FractionCollectorHandler:
                 on_complete()
             return
 
-        print(f"Starting sample collection for {self.controller.sample_duration:.1f} s.")
+        print(f"[{time.strftime('%H:%M:%S')}] Starting sample collection for {self.controller.sample_duration:.1f} s.")
 
         # Schedule stop after computed duration.
         duration_ms = max(0, int(self.controller.sample_duration * 1000))
@@ -199,7 +199,7 @@ class FractionCollectorHandler:
         ):
             print("Failed to stop sample collection.")
         else:
-            print(f"Sample taken: {sample_id}")
+            print(f"[{time.strftime('%H:%M:%S')}] Sample taken: {sample_id}")
 
         # Read current collector position.
         current_position = self.controller.fractioncollector.position()
@@ -248,15 +248,15 @@ class FractionCollectorHandler:
 
         current_arm_position = self.controller.fractioncollector.position()
 
-        print(f"Current flowrate: {flowrate:.3f} mL/min")
-        print(f"Cleaning dead volume: {controller_dead_volume:.3f} mL")
+        print(f"[{time.strftime('%H:%M:%S')}] Current flowrate: {flowrate:.3f} mL/min")
+        print(f"[{time.strftime('%H:%M:%S')}] Cleaning dead volume: {controller_dead_volume:.3f} mL")
 
         if flowrate <= 0:
             print(f"[{time.strftime('%H:%M:%S')}] Cannot clean dead volume: flowrate must be greater than 0 mL/min.")
             return False
 
         clean_duration_ms = int((controller_dead_volume / flowrate) * 60 * 1000)
-        print(f"Calculated clean duration: {clean_duration_ms} ms based on flowrate and dead volume.")
+        print(f"[{time.strftime('%H:%M:%S')}] Calculated clean duration: {clean_duration_ms} ms based on flowrate and dead volume.")
 
         try:
             # Move the head to waste before flushing the dead volume.
