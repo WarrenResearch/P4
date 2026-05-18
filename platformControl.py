@@ -8,7 +8,6 @@ import time
 from sequence_manager import SequenceExecutor
 from fraction_collector_handler import FractionCollectorHandler
 from platform_config import PlatformConfigHandler
-import os 
 import platform_monitor
 import datetime
 
@@ -323,6 +322,7 @@ class PlatformControl(QtWidgets.QWidget):
     def upload_sequence(self):
         """Update the cached sequence DataFrame from current table contents."""
         self.sequence_targets_df = self.get_sequence_targets_df()
+        self._sequence_df = self.sequence_targets_df.copy()
         return self.sequence_targets_df
 
     def _on_targets_table_changed(self, _item):
@@ -591,62 +591,4 @@ class PlatformControl(QtWidgets.QWidget):
         return self.sequence_executor.run_sequence()
 
     def stop_sequence(self):
-        """Stop the running sequence, set all pumps to 0.1 mL/min, reset the auto sampler, set temperature to 25.0 C."""
-        # Stop the sequence
-        self._sequence_running = False
-        self._invalidate_sequence_callbacks()
-        self._cancel_sequence_timers()
-        print(f"[{time.strftime('%H:%M:%S')}] Sequence stopped.")
-
-
-
-
-
-        log_dir = "Sequence_logs"
-        if not os.path.isdir(log_dir):
-            os.makedirs(log_dir, exist_ok=True)
-
-        start_time_for_log = self._get_monitor_start_time_str()
-        log_path = os.path.join(log_dir, f"Sequence_log_{start_time_for_log}.csv")
-        try:
-            self._sequence_df.to_csv(log_path, index=False)
-            print(f"[{time.strftime('%H:%M:%S')}] Sequence log saved to {log_path}")
-        except Exception as error:
-            print(f"[{time.strftime('%H:%M:%S')}] Failed to save sequence log: {error}")
-
-        # Set temperature to 25.0 C
-        try:
-            self.thermocontroller.targetTempText.setText("25.0")
-            self.thermocontroller.setTargetTemperature()
-            print(f"[{time.strftime('%H:%M:%S')}] Temperature set to 25.0 C.")
-        except Exception as error:
-            print(f"[{time.strftime('%H:%M:%S')}] Failed to set temperature: {error}")
-
-
-        # Set all pumps to 0.1 mL/min and stop them
-        for pump_widget in self.pump_widgets:
-            if not hasattr(pump_widget, "pumpObj"):
-                continue
-
-            try:
-                pump_name = pump_widget.nameEdit.text().strip() or "Unnamed pump"
-                pump_widget.setFlowrateText.setText("0.1")
-                pump_widget.setFlowrate()
-                pump_widget.stop()
-                print(f"[{time.strftime('%H:%M:%S')}] {pump_name} stopped at 0.1 mL/min.")
-            except Exception as error:
-                pump_name = pump_widget.nameEdit.text().strip() or "Unnamed pump"
-                print(f"[{time.strftime('%H:%M:%S')}] Failed to stop {pump_name}: {error}")
-
-        # Reset the fraction collector to HOME
-        try:
-            if self._is_fraction_collector_connected():
-                self.reset_fraction_collector()
-                print(f"[{time.strftime('%H:%M:%S')}] Fraction collector reset to HOME.")
-            else:
-                print(f"[{time.strftime('%H:%M:%S')}] Fraction collector not connected.")
-        except Exception as error:
-            print(f"[{time.strftime('%H:%M:%S')}] Failed to reset fraction collector: {error}")
-    
-        
-        print(f"[{time.strftime('%H:%M:%S')}] Sequence stop complete.")
+        return self.sequence_executor.stop_sequence()
