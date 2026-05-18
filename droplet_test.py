@@ -25,7 +25,7 @@ class DropletCounter:
         self.start_count = int(self.driver.drop_count()) # Get the initial droplet count from the device
         print(f"Starting droplet count: {self.start_count}")
 
-        self.maximum_duration_min = 0.2 # change this for duration of experiment in mins
+        self.maximum_duration_min = 3 # change this for duration of experiment in mins
         self.maximum_duration_s = self.maximum_duration_min * 60
 
         # data storage area 
@@ -70,7 +70,7 @@ class DropletCounter:
 
         duration = current_time - self.start_time 
 
-        if duration > self.maximum_duration_s:
+        if duration >= self.maximum_duration_s:
             QApplication.quit()
             print(f"Total Gradient: {self.total_gradient():.2f} droplets/s")
             self.results_to_csv()
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     tracker = DropletCounter() 
-    tracker.timer.start(500) # Start the timer with an explicit 1000ms interval here
+    tracker.timer.start(5000) # Start the timer with an explicit 5s interval here
 
     try:
         sys.exit(app.exec_()) 
