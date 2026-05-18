@@ -5,19 +5,25 @@ import time
 import fraction_driver
 import matplotlib.pyplot as plt
 import pandas as pd
+import os
 
 class DropletCounter:
     def __init__(self):
         self.driver = fraction_driver.AzuraFC61()
         self.driver.connect() #initiate connection to the device
-        self.driver.set_remote(1) #set the fraction collector to remote 
+        time.sleep(1) # give it a moment to connect before sending commands
+        self.driver.set_remote(0) #set the fraction collector to remote 
+        time.sleep(0.5) # give it a moment to switch modes before starting to poll
+        self.driver.move_to_vial('W') # move to the waste vial to start with a clean slate
+        time.sleep(2) # give it a moment to move before starting to poll
+        self.driver.set_collect(1) # make sure collection is off to start with
         
         self.timer = QTimer() 
         self.timer.timeout.connect(self.poll_droplet_count) 
-        
         self.start_time = time.time() 
 
-        self.start_count = self.driver.droplet_count() # Get the initial droplet count from the device
+        self.start_count = int(self.driver.drop_count()) # Get the initial droplet count from the device
+        print(f"Starting droplet count: {self.start_count}")
 
         self.maximum_duration_min = 0.2 # change this for duration of experiment in mins
         self.maximum_duration_s = self.maximum_duration_min * 60
@@ -33,7 +39,7 @@ class DropletCounter:
         
     def get_droplet_count(self):
         # Simulated data increasing over time
-        return self.driver.droplet_count() 
+        return int(self.driver.drop_count()) 
     
     def total_gradient(self):
         if len(self.timestamps) < 2:
@@ -42,14 +48,21 @@ class DropletCounter:
         total_count = self.droplet_counts[-1] - self.droplet_counts[0]
         return total_count / total_time if total_time > 0 else 0
     
-    def results_to_csv(self, filename="droplet_counts.csv"):
+    def results_to_csv(self, filename=None):
+        if filename is None:
+            filename = time.strftime("droplet_data_%Y%m%d_%H%M%S.csv", time.localtime(self.start_time))
+        results_dir = "calibration_results"
+        os.makedirs(results_dir, exist_ok=True)
+        filepath = os.path.join(results_dir, filename)
+
         df = pd.DataFrame({
             "Time (s)": self.timestamps,
             "Droplet Count": self.droplet_counts,
-            "Gradient (droplets/s)": self.gradient
+            "Gradient (droplets/s)": self.gradient,
+            "total Gradient (droplets/s)": [self.total_gradient()] * len(self.timestamps)
         })
-        df.to_csv(filename, index=False, float_format="%.3f")
-        print(f"Results saved to {filename}")
+        df.to_csv(filepath, index=False, float_format="%.3f")
+        print(f"Results saved to {filepath}")
         
     def poll_droplet_count(self):
 
@@ -61,6 +74,8 @@ class DropletCounter:
             QApplication.quit()
             print(f"Total Gradient: {self.total_gradient():.2f} droplets/s")
             self.results_to_csv()
+            self.driver.set_collect(0) # make sure to turn off collection at the end of the experiment
+            self.driver.disconnect()
             return
         
         relative_count = self.get_droplet_count() - self.start_count
@@ -92,4 +107,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         tracker.timer.stop()
         tracker.results_to_csv()
+        tracker.driver.set_collect(0) # make sure to turn off collection if we exit early
+        tracker.driver.disconnect()
         
