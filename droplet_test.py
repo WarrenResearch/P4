@@ -14,7 +14,7 @@ class DropletCounter:
         time.sleep(1) # give it a moment to connect before sending commands
         self.driver.set_remote(0) #set the fraction collector to remote 
         time.sleep(0.5) # give it a moment to switch modes before starting to poll
-        self.driver.move_to_vial('W') # move to the waste vial to start with a clean slate
+        self.driver.move_to_vial('C7') # move to the waste vial to start with a clean slate
         time.sleep(2) # give it a moment to move before starting to poll
         self.driver.set_collect(1) # make sure collection is off to start with
         
