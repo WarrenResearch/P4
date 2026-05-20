@@ -6,26 +6,28 @@ import fraction_driver
 import matplotlib.pyplot as plt
 import pandas as pd
 import os
+import numpy as np
+
 
 class DropletCounter:
     def __init__(self):
-        self.driver = fraction_driver.AzuraFC61()
-        self.driver.connect() #initiate connection to the device
-        time.sleep(1) # give it a moment to connect before sending commands
-        self.driver.set_remote(0) #set the fraction collector to remote 
-        time.sleep(0.5) # give it a moment to switch modes before starting to poll
-        self.driver.move_to_vial('C7') # move to the waste vial to start with a clean slate
-        time.sleep(2) # give it a moment to move before starting to poll
-        self.driver.set_collect(1) # make sure collection is off to start with
+        #self.driver = fraction_driver.AzuraFC61()
+        #self.driver.connect() #initiate connection to the device
+        #time.sleep(1) # give it a moment to connect before sending commands
+        #self.driver.set_remote(0) #set the fraction collector to remote 
+        #time.sleep(0.5) # give it a moment to switch modes before starting to poll
+        #self.driver.move_to_vial('C7') # move to the waste vial to start with a clean slate
+        #time.sleep(2) # give it a moment to move before starting to poll
+        #self.driver.set_collect(1) # make sure collection is off to start with
         
         self.timer = QTimer() 
         self.timer.timeout.connect(self.poll_droplet_count) 
         self.start_time = time.time() 
 
-        self.start_count = int(self.driver.drop_count()) # Get the initial droplet count from the device
+        self.start_count = 0 #int(self.driver.drop_count()) # Get the initial droplet count from the device
         print(f"Starting droplet count: {self.start_count}")
 
-        self.maximum_duration_min = 3 # change this for duration of experiment in mins
+        self.maximum_duration_min = 0.5 # change this for duration of experiment in mins
         self.maximum_duration_s = self.maximum_duration_min * 60
 
         # data storage area 
@@ -38,8 +40,13 @@ class DropletCounter:
 
         
     def get_droplet_count(self):
-        # Simulated data increasing over time
-        return int(self.driver.drop_count()) 
+        import random
+
+        if not hasattr(self, '_fake_hardware_count'):
+            self._fake_hardware_count = 0
+        
+        self._fake_hardware_count += random.randint(0, 5) # simulate 0-5 droplets every poll
+        return self._fake_hardware_count #int(self.driver.drop_count()) 
     
     def total_gradient(self):
         if len(self.timestamps) < 2:
@@ -74,8 +81,9 @@ class DropletCounter:
             QApplication.quit()
             print(f"Total Gradient: {self.total_gradient():.2f} droplets/s")
             self.results_to_csv()
-            self.driver.set_collect(0) # make sure to turn off collection at the end of the experiment
-            self.driver.disconnect()
+            self.results_gradient()
+            #self.driver.set_collect(0) # make sure to turn off collection at the end of the experiment
+            #self.driver.disconnect()
             return
         
         relative_count = self.get_droplet_count() - self.start_count
@@ -94,6 +102,18 @@ class DropletCounter:
         
         # Adding a print statement so you can see it working in the console
         print(f"Elapsed: {duration:.1f}s | Droplet Count: {relative_count} | Gradient: {gradient:.2f} droplets/s") 
+    
+    def results_gradient(self):
+        #placeholder: this function will take each dataset and find the gradient for each, given y is forced through 0, this is the calibration for each pump
+        x = np.array(self.timestamps + [0]) # gives a 0, 0 point for forcing through 0
+        y = np.array(self.droplet_counts + [0])
+
+        x = x[:,np.newaxis]
+        a, _, _, _ = np.linalg.lstsq(x,y)
+        print(a)
+        return a
+
+
 
 
 if __name__ == "__main__":
@@ -107,6 +127,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         tracker.timer.stop()
         tracker.results_to_csv()
-        tracker.driver.set_collect(0) # make sure to turn off collection if we exit early
-        tracker.driver.disconnect()
+        #tracker.driver.set_collect(0) # make sure to turn off collection if we exit early
+        #tracker.driver.disconnect()
         
