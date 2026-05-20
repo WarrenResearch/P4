@@ -127,4 +127,8 @@ if __name__ == "__main__":
             tracker.save_master_csv()
         #tracker.driver.set_collect(0) # make sure to turn off collection if we exit early
         #tracker.driver.disconnect()
+
+
+
+""""truncate seconds to 2 significant figures on df and output"""
         
