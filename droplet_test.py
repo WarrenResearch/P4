@@ -33,10 +33,23 @@ class DropletCounter:
         # data storage area 
         self.droplet_counts = [] 
         self.timestamps = [] 
-        self.gradient = []
 
         self.prev_count = 0
         self.prev_time = self.start_time
+
+
+
+        for i in range(3): # simulate 3 flow rates for calibration
+            print(f"Starting calibration for flow rate {i+1}...")
+            self.timer.start(5000) # Start the timer with an explicit 5s interval here
+            while self.timer.isActive():
+                QApplication.processEvents() # Keep the event loop running to allow timer to function
+            print(f"Calibration for flow rate {i+1} completed.")
+            self.results_to_csv(filename=time.strftime("droplet_data_%Y%m%d_%H%M%S.csv", time.localtime(self.start_time)))
+            self.droplet_counts = [] 
+            self.timestamps = [] 
+            self.start_time = time.time() 
+            self.start_count = 0 # reset start count for next calibration
 
         
     def get_droplet_count(self):
@@ -48,12 +61,6 @@ class DropletCounter:
         self._fake_hardware_count += random.randint(0, 5) # simulate 0-5 droplets every poll
         return self._fake_hardware_count #int(self.driver.drop_count()) 
     
-    def total_gradient(self):
-        if len(self.timestamps) < 2:
-            return 0 
-        total_time = self.timestamps[-1] - self.timestamps[0]
-        total_count = self.droplet_counts[-1] - self.droplet_counts[0]
-        return total_count / total_time if total_time > 0 else 0
     
     def results_to_csv(self, filename=None):
         if filename is None:
@@ -65,8 +72,7 @@ class DropletCounter:
         df = pd.DataFrame({
             "Time (s)": self.timestamps,
             "Droplet Count": self.droplet_counts,
-            "Gradient (droplets/s)": self.gradient,
-            "total Gradient (droplets/s)": [self.total_gradient()] * len(self.timestamps)
+            "gradient from matplotlib (droplets/s)": self.results_gradient()[0]  
         })
         df.to_csv(filepath, index=False, float_format="%.3f")
         print(f"Results saved to {filepath}")
@@ -79,7 +85,6 @@ class DropletCounter:
 
         if duration >= self.maximum_duration_s:
             QApplication.quit()
-            print(f"Total Gradient: {self.total_gradient():.2f} droplets/s")
             self.results_to_csv()
             self.results_gradient()
             #self.driver.set_collect(0) # make sure to turn off collection at the end of the experiment
@@ -88,20 +93,14 @@ class DropletCounter:
         
         relative_count = self.get_droplet_count() - self.start_count
 
-        delta_count = relative_count - self.prev_count
-        delta_time = current_time - self.prev_time
-
-        gradient = delta_count / delta_time if delta_time > 0 else 0 # avoids div by zero
-
         self.droplet_counts.append(relative_count)
         self.timestamps.append(duration)
-        self.gradient.append(gradient)
 
         self.prev_count = relative_count
         self.prev_time = current_time
         
         # Adding a print statement so you can see it working in the console
-        print(f"Elapsed: {duration:.1f}s | Droplet Count: {relative_count} | Gradient: {gradient:.2f} droplets/s") 
+        print(f"Elapsed: {duration:.1f}s | Droplet Count: {relative_count} ") 
     
     def results_gradient(self):
         #placeholder: this function will take each dataset and find the gradient for each, given y is forced through 0, this is the calibration for each pump
@@ -110,6 +109,7 @@ class DropletCounter:
 
         x = x[:,np.newaxis]
         a, _, _, _ = np.linalg.lstsq(x,y)
+
         print(a)
         return a
 
