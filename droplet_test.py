@@ -9,6 +9,7 @@ import os
 import numpy as np
 
 
+
 class DropletCounter:
     def __init__(self):
         #self.driver = fraction_driver.AzuraFC61()
@@ -23,7 +24,9 @@ class DropletCounter:
         self.current_run = 1
         self.total_runs = 3
 
-        self.maximum_duration_min = 0.51 # change this for duration of experiment in mins
+        self.flowrate_list = [0.1, 0.5, 1.0] # adjust as needed
+
+        self.maximum_duration_min = 0.25 # change this for duration of experiment in mins
         self.maximum_duration_s = self.maximum_duration_min * 60
 
         self.timer = QTimer() 
@@ -31,15 +34,20 @@ class DropletCounter:
         
         self.master_data = {} # start dictionary with all data
         
+        for flowrate in self.flowrate_list:
+            print(f"Setting flowrate to {flowrate} mL/min")
+            self.start_new_run()
 
-        self.start_new_run()
+        if flowrate in self.flowrate_list = self.flowrate_list[-1]:
+            print(f"Finished all runs, master CSV saved.")
+            self.save_master_csv()
+            QApplication.quit() # Exit the application after saving the CSV    
 
+        
     def start_new_run(self):
         print(f'Starting Calibration Run... {self.current_run} of {self.total_runs}')
 
         self.start_time = time.time()
-        
-
         self.droplet_count = []
         self.timestamps = []
 
@@ -60,8 +68,8 @@ class DropletCounter:
 
         current_time = time.time()
         duration = current_time - self.start_time 
-        
-        self.start_count = 0 #int(self.driver.drop_count())
+
+        self.start_count = 0 #int(self.driver.drop_count()) # reset after every sequence 
 
         if duration >= self.maximum_duration_s:
             self.timer.stop()
@@ -73,25 +81,19 @@ class DropletCounter:
 
             self.master_data[f'Run {self.current_run} Droplet Count'] = self.droplet_count
             self.master_data[f'Run {self.current_run} Gradient'] = [gradient_value] * len(self.timestamps)
-
-            self.start_count = self.droplet_count[-1]
-
+            self.master_data[f'Run {self.current_run} Flowrate (mL/min)'] = [self.flowrate_list[self.current_run-1]] * len(self.timestamps)
 
             if self.current_run < self.total_runs:
                 self.current_run += 1
                 self.start_new_run()
-            else:
-                self.save_master_csv()
-                print('Finished all runs, master CSV saved.')
-                QApplication.quit() # Exit the application after saving the CSV
-            return
-        
+    
+
         relative_count = self.get_droplet_count() - self.start_count
         
         self.droplet_count.append(relative_count)   
         self.timestamps.append(duration)
 
-        print(f"[Run {self.current_run}] Time: {duration:.0f}s, Droplet Count: {relative_count}")
+        print(f"[Flowrate {self.flowrate_list[self.current_run-1]} mL/min] Run {self.current_run}] Time: {duration:.0f}s, Droplet Count: {relative_count}")
 
    
     def results_gradient(self):
