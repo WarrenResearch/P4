@@ -38,7 +38,7 @@ class DropletCounter:
         print(f'Starting Calibration Run... {self.current_run} of {self.total_runs}')
 
         self.start_time = time.time()
-        self.start_count = 0 #int(self.driver.drop_count()) # get the starting droplet count from the hardware
+        
 
         self.droplet_count = []
         self.timestamps = []
@@ -60,16 +60,21 @@ class DropletCounter:
 
         current_time = time.time()
         duration = current_time - self.start_time 
+        
+        self.start_count = 0 #int(self.driver.drop_count())
+
         if duration >= self.maximum_duration_s:
             self.timer.stop()
 
             gradient_value = self.results_gradient()
 
             if "Time (s)" not in self.master_data:
-                self.master_data["Time (s)"] = self.timestamps
+                self.master_data["Time (s)"] = [round(ts) for ts in self.timestamps]
 
             self.master_data[f'Run {self.current_run} Droplet Count'] = self.droplet_count
             self.master_data[f'Run {self.current_run} Gradient'] = [gradient_value] * len(self.timestamps)
+
+            self.start_count = self.droplet_count[-1]
 
 
             if self.current_run < self.total_runs:
@@ -86,7 +91,7 @@ class DropletCounter:
         self.droplet_count.append(relative_count)   
         self.timestamps.append(duration)
 
-        print(f"[Run {self.current_run}] Time: {duration}s, Droplet Count: {relative_count}")
+        print(f"[Run {self.current_run}] Time: {duration:.0f}s, Droplet Count: {relative_count}")
 
    
     def results_gradient(self):
@@ -130,5 +135,5 @@ if __name__ == "__main__":
 
 
 
-""""truncate seconds to 2 significant figures on df and output"""
+""""truncate seconds to 0 decimal places figures on df and output"""
         
