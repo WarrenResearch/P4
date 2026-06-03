@@ -7,135 +7,165 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import os
 import numpy as np
-
-
+import random
 
 class DropletCounter:
     def __init__(self):
-        #self.driver = fraction_driver.AzuraFC61()
-        #self.driver.connect() #initiate connection to the device
-        #time.sleep(1) # give it a moment to connect before sending commands
-        #self.driver.set_remote(0) #set the fraction collector to remote 
-        #time.sleep(0.5) # give it a moment to switch modes before starting to poll
-        #self.driver.move_to_vial('C7') # move to the waste vial to start with a clean slate
-        #time.sleep(2) # give it a moment to move before starting to poll
-        #self.driver.set_collect(1) # make sure collection is off to start with
+        # --- Hardware Initialization (Uncomment for real deployment) ---
+        # self.driver = fraction_driver.AzuraFC61()
+        # self.driver.connect() 
+        # time.sleep(1) 
+        # self.driver.set_remote(0) 
+        # time.sleep(0.5) 
+        # self.driver.move_to_vial('C7') 
+        # time.sleep(2) 
+        # self.driver.set_collect(1) 
         
-        self.current_run = 1
-        self.total_runs = 3
+        # --- Experiment Settings ---
+        self.flowrate_list = [0.1, 0.5] 
+        self.runs_per_flowrate = 3 
+        self.maximum_duration_min = 0.25 
+        self.maximum_duration_s = self.maximum_duration_min * 60 
 
-        self.flowrate_list = [0.1, 0.5, 1.0] # adjust as needed
+        # --- State Tracking Indexes ---
+        self.current_flow_idx = 0
+        self.current_run_idx = 0  
 
-        self.maximum_duration_min = 0.25 # change this for duration of experiment in mins
-        self.maximum_duration_s = self.maximum_duration_min * 60
+        # --- Storage Structs ---
+        # FIX: Track records sequentially as rows to prevent Pandas length mismatch errors
+        self.master_records = [] 
+        self.summary_averages = {flow: [] for flow in self.flowrate_list}
 
+        # --- Timer Setup ---
         self.timer = QTimer() 
         self.timer.timeout.connect(self.poll_droplet_count) 
         
-        self.master_data = {} # start dictionary with all data
-        
-        for flowrate in self.flowrate_list:
-            print(f"Setting flowrate to {flowrate} mL/min")
-            self.start_new_run()
+        self.start_new_run()
 
-        if flowrate in self.flowrate_list = self.flowrate_list[-1]:
-            print(f"Finished all runs, master CSV saved.")
-            self.save_master_csv()
-            QApplication.quit() # Exit the application after saving the CSV    
-
-        
     def start_new_run(self):
-        print(f'Starting Calibration Run... {self.current_run} of {self.total_runs}')
-
-        self.start_time = time.time()
-        self.droplet_count = []
-        self.timestamps = []
-
-        self.timer.start(5000) # poll every 5 seconds
-
+        current_flowrate = self.flowrate_list[self.current_flow_idx]
+        run_number = self.current_run_idx + 1
         
-    def get_droplet_count(self):
-        import random
+        print(f"\n--- Starting Run {run_number} of {self.runs_per_flowrate} for Flowrate: {current_flowrate} mL/min ---")
+        
+        # self.driver.set_flowrate(current_flowrate) 
 
+        self.start_time = time.time() 
+        self.droplet_count = [] 
+        self.timestamps = [] 
+        self._fake_hardware_count = 0 
+
+        self.timer.start(5000) # Poll every 5 seconds
+
+    def get_droplet_count(self):
         if not hasattr(self, '_fake_hardware_count'):
             self._fake_hardware_count = 0
-        
-        self._fake_hardware_count += random.randint(0, 5) # simulate 0-5 droplets every poll
-        return self._fake_hardware_count #int(self.driver.drop_count()) 
-    
+        self._fake_hardware_count += random.randint(0, 5) 
+        return self._fake_hardware_count 
     
     def poll_droplet_count(self):
-
         current_time = time.time()
         duration = current_time - self.start_time 
 
-        self.start_count = 0 #int(self.driver.drop_count()) # reset after every sequence 
+        current_flowrate = self.flowrate_list[self.current_flow_idx]
+        run_number = self.current_run_idx + 1
 
-        if duration >= self.maximum_duration_s:
-            self.timer.stop()
-
-            gradient_value = self.results_gradient()
-
-            if "Time (s)" not in self.master_data:
-                self.master_data["Time (s)"] = [round(ts) for ts in self.timestamps]
-
-            self.master_data[f'Run {self.current_run} Droplet Count'] = self.droplet_count
-            self.master_data[f'Run {self.current_run} Gradient'] = [gradient_value] * len(self.timestamps)
-            self.master_data[f'Run {self.current_run} Flowrate (mL/min)'] = [self.flowrate_list[self.current_run-1]] * len(self.timestamps)
-
-            if self.current_run < self.total_runs:
-                self.current_run += 1
-                self.start_new_run()
-    
-
-        relative_count = self.get_droplet_count() - self.start_count
-        
+        # 1. Grab data point first so the final interval isn't missed
+        relative_count = self.get_droplet_count()
         self.droplet_count.append(relative_count)   
         self.timestamps.append(duration)
 
-        print(f"[Flowrate {self.flowrate_list[self.current_run-1]} mL/min] Run {self.current_run}] Time: {duration:.0f}s, Droplet Count: {relative_count}")
+        print(f"[{current_flowrate} mL/min | Run {run_number}] Time: {duration:.0f}s, Droplets: {relative_count}")
 
-   
-    def results_gradient(self):
-        #placeholder: this function will take each dataset and find the gradient for each, given y is forced through 0, this is the calibration for each pump
-        x = np.array(self.timestamps + [0]) # gives a 0, 0 point for forcing through 0
-        y = np.array(self.droplet_count + [0])
+        # 2. Check if this specific run window is completed
+        if duration >= self.maximum_duration_s:
+            self.timer.stop() 
 
-        x = x[:,np.newaxis]
-        a, _, _, _ = np.linalg.lstsq(x,y,rcond=None)
+            # Calculate average for this specific run window
+            droplet_average = np.mean(self.droplet_count) if self.droplet_count else 0
+            self.summary_averages[current_flowrate].append(droplet_average)
 
-        print(a)
-        return a
-    
+            print(f"-> Finished Run {run_number} (@ {current_flowrate} mL/min). Average Droplets: {droplet_average:.2f}")
+
+            # Append the completed time-series data for this run into master records
+            for ts, count in zip(self.timestamps, self.droplet_count):
+                self.master_records.append({
+                    "Flowrate (mL/min)": current_flowrate,
+                    "Run": run_number,
+                    "Time (s)": round(ts),
+                    "Droplet Count": count,
+                    "Run Average": round(droplet_average, 3)
+                })
+
+            # State Logic: Move to next run or next flowrate
+            if self.current_run_idx < (self.runs_per_flowrate - 1):
+                self.current_run_idx += 1
+                self.start_new_run()
+            else:
+                # Calculate overall average for this completed flowrate block
+                overall_avg = np.mean(self.summary_averages[current_flowrate])
+                print(f"==> OVERALL AVERAGE FOR {current_flowrate} mL/min: {overall_avg:.2f} droplets <==")
+                
+                # Apply the final overall average back onto the records of this specific flowrate block
+                for record in self.master_records:
+                    if record["Flowrate (mL/min)"] == current_flowrate:
+                        record["Overall Average"] = round(overall_avg, 3)
+
+                if self.current_flow_idx < (len(self.flowrate_list) - 1):
+                    self.current_flow_idx += 1
+                    self.current_run_idx = 0
+                    self.start_new_run()
+                else:
+                    self.calibration_gradient()
+
+                    print(f"\nAll experiments complete! Master CSV saving...")
+                    self.save_master_csv()
+                    QApplication.quit() 
+
     def save_master_csv(self):
         results_dir = 'calibration_results'
         os.makedirs(results_dir, exist_ok=True)
-
         timestamp_str = time.strftime("%Y%m%d-%H%M%S")
         filepath = os.path.join(results_dir, f'calibration_data_{timestamp_str}.csv')
 
-        df = pd.DataFrame(self.master_data).to_csv(filepath, index=False,float_format='%.3f')
-        print(f'Master CSV saved to: {filepath}')
+        # This row-by-row structure safely converts to a Dataframe without length limits!
+        df = pd.DataFrame(self.master_records)
+        df.to_csv(filepath, index=False, float_format='%.3f')
+        print(f'Master CSV safely written to: {filepath}')
 
 
+    def calibration_gradient(self):
+        x_flowrates = []
+        y_averages = []
 
+        for flowrate, avgs_list in self.summary_averages.items():
+            if avgs_list:
+                x_flowrates.append(flowrate)
+                y_averages.append(np.mean(avgs_list))
+            else:
+                print("No averages available to plot.")
+                return None
+        
+        x = np.array(x_flowrates)
+        y = np.array(y_averages)
+
+        x = x[:,np.newaxis]
+        gradient, _, _, _ = np.linalg.lstsq(x, y, rcond=None)
+        for record in self.master_records:
+            record['Calibration Gradient'] = round(gradient[0],4)
+            
+        return gradient[0]
+    
+
+    
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-
     tracker = DropletCounter()
-
     try:
         sys.exit(app.exec_()) 
     except KeyboardInterrupt:
         tracker.timer.stop()
-        if tracker.master_data:
+        if tracker.master_records:
             tracker.save_master_csv()
-        #tracker.driver.set_collect(0) # make sure to turn off collection if we exit early
-        #tracker.driver.disconnect()
-
-
-
-""""truncate seconds to 0 decimal places figures on df and output"""
-        
