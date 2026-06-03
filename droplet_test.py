@@ -8,10 +8,17 @@ import pandas as pd
 import os
 import numpy as np
 import random
+import pumpWidget as pw
+import platformControl as pc
+
+''''
+designed for one pump at a time, do not use more than 1 - to test multiple pumps, run this script when connected to each pump separately. 
+
+'''
 
 class DropletCounter:
     def __init__(self):
-        # --- Hardware Initialization (Uncomment for real deployment) ---
+        # Hardware Initialization  
         # self.driver = fraction_driver.AzuraFC61()
         # self.driver.connect() 
         # time.sleep(1) 
@@ -20,9 +27,13 @@ class DropletCounter:
         # self.driver.move_to_vial('C7') 
         # time.sleep(2) 
         # self.driver.set_collect(1) 
-        
+        #self.platform = pc.PlatformControl()
+        #self.pump = pw.PumpControl()
+
+        self.reactor_volume_ml = self.platform.reactor_volume_ml
+
         # --- Experiment Settings ---
-        self.flowrate_list = [0.1, 0.5] 
+        self.flowrate_list = [0.1, 0.25, 0.5] 
         self.runs_per_flowrate = 3 
         self.maximum_duration_min = 0.25 
         self.maximum_duration_s = self.maximum_duration_min * 60 
@@ -46,10 +57,21 @@ class DropletCounter:
         current_flowrate = self.flowrate_list[self.current_flow_idx]
         run_number = self.current_run_idx + 1
         
-        print(f"\n--- Starting Run {run_number} of {self.runs_per_flowrate} for Flowrate: {current_flowrate} mL/min ---")
+        print(f"\n setting flowrates and waiting for steady state...")
         
-        # self.driver.set_flowrate(current_flowrate) 
+        # self.pump.set_flowrate(current_flowrate)
+        # self.pump.set_FlowrateText(str(current_flowrate))
+        # self.pump.start()
+        
+        if self.current_run_idx == 0:
+            steady_state_minutes = 3 * (self.reactor_volume_ml / current_flowrate)
+            steady_state_seconds = steady_state_minutes * 60
 
+            QTimer.singleShot(int(steady_state_seconds*1000),self.activate_measurement_timer)
+        else:
+            self.activate_measurement_timer()
+    
+    def activate_measurement_timer(self):
         self.start_time = time.time() 
         self.droplet_count = [] 
         self.timestamps = [] 
@@ -153,7 +175,7 @@ class DropletCounter:
         gradient, _, _, _ = np.linalg.lstsq(x, y, rcond=None)
         for record in self.master_records:
             record['Calibration Gradient'] = round(gradient[0],4)
-            
+
         return gradient[0]
     
 

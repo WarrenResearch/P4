@@ -297,13 +297,6 @@ class FractionCollectorHandler:
         return True
     
     def calibrate_pump(self):
-        # calibrate_pump will call droplet_test.py and count droplets 3 times for 3 flowrates (0.5ml, 0.25ml, 0.1 ml)
-        # droplet_test should return a gradient (forced through 0) which is the calibration for the pump
-
-
-
-
-
-
-
-
+            # calibrate_pump will call droplet_test.py and count droplets 3 times for 3 flowrates (0.5ml, 0.25ml, 0.1 ml)
+            # droplet_test should return a gradient (forced through 0) which is the calibration for the pump
+        pass
