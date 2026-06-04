@@ -1,0 +1,30 @@
+name: P4_env_v2
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11  
+  - pip=23.3.1
+  # Core Library (Letting conda handle the exact compiled match)
+  - numpy=2.0.1
+  - pandas=2.3.3
+  - matplotlib=3.9.2
+  - bottleneck
+  - numexpr
+  - scipy
+  - ax-platform 
+  
+  # GUI & Viz
+  - pyqt
+  - pyqtgraph=0.13.7
+  - pillow=11.1.0
+  
+  - minimalmodbus=2.1.1
+  - apscheduler=3.11.0
+  - tzlocal=5.3
+  - pyserial=3.5
+  - tornado=6.5.1
+  - pytz=2025.2
+  - python-dateutil=2.9.0
+  - pip:
+      - doepy==0.0.1
