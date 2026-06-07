@@ -129,6 +129,11 @@ class PumpControl(QtWidgets.QWidget):
         self.pumpStopButton.setStyleSheet("background-color: #ab1b1b;" "color: white;" "border-radius:5px")
         self.pumpStopButton.setHidden(True)
 
+        self.pumpCalibrateButton = QtWidgets.QPushButton("Calibrate")
+        self.pumpCalibrateButton.setFixedSize(80, 25)
+        self.pumpCalibrateButton.setStyleSheet("background-color: #2f6f9f;" "color: white;" "border-radius:5px")
+        self.pumpCalibrateButton.setHidden(True)
+
         self.layout = QtWidgets.QVBoxLayout()
         self.setLayout(self.layout)
 
@@ -159,6 +164,7 @@ class PumpControl(QtWidgets.QWidget):
         self.grid.addWidget(self.setFlowrateText_2, 11, 4, 1, 2)
         self.grid.addWidget(self.calibrationFactorLabel, 12, 0)
         self.grid.addWidget(self.calibrationFactorText, 13, 0)
+        self.grid.addWidget(self.pumpCalibrateButton, 13, 1)
         self.grid.addWidget(self.pumpStartButton, 14, 0)
         self.grid.addWidget(self.pumpStartButton_1, 14, 0)
         self.grid.addWidget(self.pumpStartButton_2, 14, 4)
@@ -174,6 +180,7 @@ class PumpControl(QtWidgets.QWidget):
         self.setFlowrateText.returnPressed.connect(self.setFlowrate)
         self.pumpStartButton.pressed.connect(self.start)
         self.pumpStopButton.pressed.connect(self.stop)
+        self.pumpCalibrateButton.pressed.connect(self.calibrate)
         self.nameEdit.textChanged.connect(self._on_name_changed)
 
         self.timer = QtCore.QTimer()
@@ -226,6 +233,7 @@ class PumpControl(QtWidgets.QWidget):
             self.calibrationFactorText.setHidden(False)
             self.pumpStartButton.setHidden(False)
             self.pumpStopButton.setHidden(False)
+            self.pumpCalibrateButton.setHidden(False)
         elif pump == "MilliGAT LF" or pump == "MilliGAT HF":
             self.resetWidget()
             self.pumpGroupBox.setMaximumHeight(340)
@@ -240,6 +248,7 @@ class PumpControl(QtWidgets.QWidget):
             self.calibrationFactorText.setHidden(False)
             self.pumpStartButton.setHidden(False)
             self.pumpStopButton.setHidden(False)
+            self.pumpCalibrateButton.setHidden(False)
         elif pump == "Chemyx Nexus 4000" or pump == "Chemyx Fusion 6000X":
             self.resetWidget()
             self.pumpGroupBox.setMaximumHeight(380)
@@ -254,6 +263,7 @@ class PumpControl(QtWidgets.QWidget):
             self.pumpStopButton.setHidden(False)
             self.setSyrSizeLabel.setHidden(False)
             self.setSyrCombo.setHidden(False)
+            self.pumpCalibrateButton.setHidden(False)
         elif pump == "Chemyx Fusion 4000X":
             self.resetWidget()
             self.pumpGroupBox.setMaximumHeight(350)
@@ -272,8 +282,21 @@ class PumpControl(QtWidgets.QWidget):
             self.setSyrCombo_1.setHidden(False)
             self.setSyrSizeLabel_2.setHidden(False)
             self.setSyrCombo_2.setHidden(False)
+            self.pumpCalibrateButton.setHidden(False)
         else:
             self.resetWidget()
+
+    def calibrate(self):
+        try:
+            from droplet_calibration import DropletCounter
+            self.active_calibration = DropletCounter(widget=self)
+
+        except Exception as e:
+            msgbox = QMessageBox(self)
+            msgbox.setWindowTitle("Calibration Error")
+            msgbox.setText("Could not start calibration.")
+            msgbox.setFixedSize(300, 100)
+            msgbox.exec()
         
     def resetWidget(self):
         self.comPortLabel.setHidden(True)
@@ -296,6 +319,7 @@ class PumpControl(QtWidgets.QWidget):
         self.pumpStopButton_1.setHidden(True)
         self.pumpStartButton_2.setHidden(True)
         self.pumpStopButton_2.setHidden(True)
+        self.pumpCalibrateButton.setHidden(True)
         self.setSyrSizeLabel_1.setHidden(True)
         self.setSyrCombo_1.setHidden(True)
         self.setSyrSizeLabel_2.setHidden(True)

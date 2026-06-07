@@ -392,6 +392,9 @@ class PlatformControl(QtWidgets.QWidget):
     def clean_dead_volume(self, on_complete=None):
         return self.fraction_handler.clean_dead_volume(on_complete=on_complete)
 
+    def calibrate_pump(self, pump_widget=None):
+        return self.fraction_handler.calibrate_pump(pump_widget=pump_widget)
+
     def _set_combo_text(self, combo, value):
         if not value:
             return

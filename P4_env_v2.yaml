@@ -27,4 +27,4 @@ dependencies:
   - pytz=2025.2
   - python-dateutil=2.9.0
   - pip:
-      - doepy==0.0.1
+      - pydoe-0.3.8

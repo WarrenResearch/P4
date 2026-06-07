@@ -14,11 +14,15 @@ import platformControl as pc
 ''''
 designed for one pump at a time, do not use more than 1 - to test multiple pumps, run this script when connected to each pump separately. 
 
+uses fraction_driver, if calibration is needed using a different method add it here
+
+You will need to check self.reactor_volume is the correct volume for your calibration
 '''
 
 class DropletCounter:
-    def __init__(self):
-        # Hardware Initialization  
+    def __init__(self,widget):
+        # moving the reactor to a differnt position and connecting
+        
         # self.driver = fraction_driver.AzuraFC61()
         # self.driver.connect() 
         # time.sleep(1) 
@@ -30,10 +34,11 @@ class DropletCounter:
         #self.platform = pc.PlatformControl()
         #self.pump = pw.PumpControl()
 
-        self.reactor_volume_ml = self.platform.reactor_volume_ml
+        self.widget = widget # holds live reference to widget (so your calibration value goes to the correct place)
+        self.reactor_volume_ml = 0.01 # change this with your volume, in my case im not using the whole reacotr for the calibration 
 
         # --- Experiment Settings ---
-        self.flowrate_list = [0.1, 0.25, 0.5] 
+        self.flowrate_list = [0.1] #, 0.25, 0.5] 
         self.runs_per_flowrate = 3 
         self.maximum_duration_min = 0.25 
         self.maximum_duration_s = self.maximum_duration_min * 60 
@@ -59,9 +64,9 @@ class DropletCounter:
         
         print(f"\n setting flowrates and waiting for steady state...")
         
-        # self.pump.set_flowrate(current_flowrate)
-        # self.pump.set_FlowrateText(str(current_flowrate))
-        # self.pump.start()
+        # self.widget.set_flowrate(current_flowrate)
+        # self.widget.set_FlowrateText(str(current_flowrate))
+        # self.widget.start()
         
         if self.current_run_idx == 0:
             steady_state_minutes = 3 * (self.reactor_volume_ml / current_flowrate)
@@ -139,10 +144,17 @@ class DropletCounter:
                     self.start_new_run()
                 else:
                     self.calibration_gradient()
-
+                    self.disconnect_hardware()
                     print(f"\nAll experiments complete! Master CSV saving...")
                     self.save_master_csv()
-                    QApplication.quit() 
+                    calibration_factor = self.calibration_factor()
+
+                    self.widget.calibrationFactorText.setText(f"{calibration_factor:.4f}")
+                    print("Pump Claibrated with factor: ", calibration_factor)
+
+
+
+
 
     def save_master_csv(self):
         results_dir = 'calibration_results'
@@ -178,16 +190,12 @@ class DropletCounter:
 
         return gradient[0]
     
-
+    def calibration_factor(self):
+        expected_gradient = 59.127 # calibration of pump fr vs droplet count
+        correction_factor = expected_gradient / self.master_records[0]['Calibration Gradient']
+        return correction_factor
     
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    tracker = DropletCounter()
-    try:
-        sys.exit(app.exec_()) 
-    except KeyboardInterrupt:
-        tracker.timer.stop()
-        if tracker.master_records:
-            tracker.save_master_csv()
+    def disconnect_hardware(self):
+        print("Disconnecting hardware...")
+        # self.driver.disconnect() 
+        # self.widget.stop()
