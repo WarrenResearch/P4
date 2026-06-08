@@ -289,12 +289,14 @@ class PumpControl(QtWidgets.QWidget):
     def calibrate(self):
         try:
             from droplet_calibration import DropletCounter
-            self.active_calibration = DropletCounter(widget=self)
+            controller = self.parent()
+            driver = getattr(controller, "fractioncollector", None)
+            self.active_calibration = DropletCounter(widget=self, driver=driver)
 
         except Exception as e:
             msgbox = QMessageBox(self)
             msgbox.setWindowTitle("Calibration Error")
-            msgbox.setText("Could not start calibration.")
+            msgbox.setText("Could not start calibration: " + str(e))
             msgbox.setFixedSize(300, 100)
             msgbox.exec()
         

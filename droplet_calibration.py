@@ -20,23 +20,23 @@ You will need to check self.reactor_volume is the correct volume for your calibr
 '''
 
 class DropletCounter:
-    def __init__(self,widget):
-        # moving the fraction collector to where you want before you press calibrate
-        self.driver = fraction_driver.AzuraFC61()
-        
-        self.driver.connect() 
-        # time.sleep(1) 
-        # self.driver.set_remote(0) 
-        # time.sleep(0.5) 
-        # self.driver.move_to_vial('C7') 
-        # time.sleep(2) 
-        # self.driver.set_collect(1) 
+    def __init__(self,widget,driver=None):
+        # Reuse the already-connected fraction collector when available.
+        self.driver = driver if driver is not None else fraction_driver.AzuraFC61()
+
+        if getattr(self.driver, "sock", None) is None:
+            self.driver.connect()
+
+        # Keep the collector in remote mode before sending motion/collect commands.
+        self.driver.set_remote(0)
+        time.sleep(1)
+        self.driver.set_collect(1) 
         
         self.widget = widget # holds live reference to widget (so your calibration value goes to the correct place)
         self.reactor_volume_ml = 0.01 # change this with your volume, in my case im not using the whole reacotr for the calibration 
 
         # --- Experiment Settings ---
-        self.flowrate_list = [0.1] #, 0.25, 0.5] 
+        self.flowrate_list = [1]#0.25, 0.5] 
         self.runs_per_flowrate = 3 
         self.maximum_duration_min = 0.25 
         self.maximum_duration_s = self.maximum_duration_min * 60 
@@ -61,10 +61,9 @@ class DropletCounter:
         run_number = self.current_run_idx + 1
         
         print(f"\n setting flowrates and waiting for steady state...")
-        
-        # self.widget.set_flowrate(current_flowrate)
-        # self.widget.set_FlowrateText(str(current_flowrate))
-        # self.widget.start()
+        self.widget.setFlowrateText.setText(str(current_flowrate))
+        self.widget.setFlowrate()
+        self.widget.start()
         
         if self.current_run_idx == 0:
             steady_state_minutes = 3 * (self.reactor_volume_ml / current_flowrate)
@@ -84,10 +83,15 @@ class DropletCounter:
 
     def get_droplet_count(self):
         drop_count = self.driver.drop_count()
+
+        
         #if not hasattr(self, '_fake_hardware_count'):
         #    self._fake_hardware_count = 0
         #self._fake_hardware_count += random.randint(0, 5) 
-        return drop_count
+        try:
+            return int(drop_count)
+        except (TypeError, ValueError):
+            return 0
     
     def poll_droplet_count(self):
         current_time = time.time()
@@ -96,19 +100,19 @@ class DropletCounter:
         current_flowrate = self.flowrate_list[self.current_flow_idx]
         run_number = self.current_run_idx + 1
 
-        # 1. Grab data point first so the final interval isn't missed
+        # grab data point first so the final interval isn't missed due to timer stop
         relative_count = self.get_droplet_count()
-        self.droplet_count.append(relative_count)   
+        self.droplet_count.append(int(relative_count))   
         self.timestamps.append(duration)
 
         print(f"[{current_flowrate} mL/min | Run {run_number}] Time: {duration:.0f}s, Droplets: {relative_count}")
 
-        # 2. Check if this specific run window is completed
+        #  Check if this specific run window is completed
         if duration >= self.maximum_duration_s:
             self.timer.stop() 
 
             # Calculate average for this specific run window
-            droplet_average = np.mean(self.droplet_count) if self.droplet_count else 0
+            droplet_average = np.mean(np.asarray(self.droplet_count, dtype=float)) if self.droplet_count else 0
             self.summary_averages[current_flowrate].append(droplet_average)
 
             print(f"-> Finished Run {run_number} (@ {current_flowrate} mL/min). Average Droplets: {droplet_average:.2f}")
@@ -142,6 +146,7 @@ class DropletCounter:
                     self.current_run_idx = 0
                     self.start_new_run()
                 else:
+                    self.driver.set_collect(0)
                     self.calibration_gradient()
                     self.disconnect_hardware()
                     print(f"\nAll experiments complete! Master CSV saving...")
