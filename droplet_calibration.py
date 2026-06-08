@@ -21,19 +21,17 @@ You will need to check self.reactor_volume is the correct volume for your calibr
 
 class DropletCounter:
     def __init__(self,widget):
-        # moving the reactor to a differnt position and connecting
+        # moving the fraction collector to where you want before you press calibrate
+        self.driver = fraction_driver.AzuraFC61()
         
-        # self.driver = fraction_driver.AzuraFC61()
-        # self.driver.connect() 
+        self.driver.connect() 
         # time.sleep(1) 
         # self.driver.set_remote(0) 
         # time.sleep(0.5) 
         # self.driver.move_to_vial('C7') 
         # time.sleep(2) 
         # self.driver.set_collect(1) 
-        #self.platform = pc.PlatformControl()
-        #self.pump = pw.PumpControl()
-
+        
         self.widget = widget # holds live reference to widget (so your calibration value goes to the correct place)
         self.reactor_volume_ml = 0.01 # change this with your volume, in my case im not using the whole reacotr for the calibration 
 
@@ -85,10 +83,11 @@ class DropletCounter:
         self.timer.start(5000) # Poll every 5 seconds
 
     def get_droplet_count(self):
-        if not hasattr(self, '_fake_hardware_count'):
-            self._fake_hardware_count = 0
-        self._fake_hardware_count += random.randint(0, 5) 
-        return self._fake_hardware_count 
+        drop_count = self.driver.drop_count()
+        #if not hasattr(self, '_fake_hardware_count'):
+        #    self._fake_hardware_count = 0
+        #self._fake_hardware_count += random.randint(0, 5) 
+        return drop_count
     
     def poll_droplet_count(self):
         current_time = time.time()
@@ -197,5 +196,5 @@ class DropletCounter:
     
     def disconnect_hardware(self):
         print("Disconnecting hardware...")
-        # self.driver.disconnect() 
-        # self.widget.stop()
+        self.driver.disconnect() 
+        self.widget.stop()
