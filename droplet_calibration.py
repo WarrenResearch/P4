@@ -110,10 +110,10 @@ class DropletCounter:
             self.timer.stop() 
 
             # Calculate average for this specific run window
-            droplet_average = np.mean(np.asarray(self.droplet_count, dtype=float)) if self.droplet_count else 0
+            droplet_average = self.droplet_count[-1]/self.maximum_duration_min if self.droplet_count else 0
             self.summary_averages[current_flowrate].append(droplet_average)
 
-            print(f"-> Finished Run {run_number} (@ {current_flowrate} mL/min). Average Droplets: {droplet_average:.2f}")
+            print(f"-> Finished Run {run_number} (@ {current_flowrate} mL/min). Average Droplets per min: {droplet_average:.2f}")
 
             # Append the completed time-series data for this run into master records
             for ts, count in zip(self.timestamps, self.droplet_count):
