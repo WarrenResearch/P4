@@ -28,17 +28,17 @@ class DropletCounter:
             self.driver.connect()
 
         # Keep the collector in remote mode before sending motion/collect commands.
-        self.driver.set_remote(0)
-        time.sleep(1)
+        self.driver.set_remote()
+        time.sleep(2) # Give it a moment to switch modes
         self.driver.set_collect(1) 
         
         self.widget = widget # holds live reference to widget (so your calibration value goes to the correct place)
-        self.reactor_volume_ml = 0.01 # change this with your volume, in my case im not using the whole reacotr for the calibration 
+        self.reactor_volume_ml = 0.1 # change this with your volume, in my case im not using the whole reacotr for the calibration 
 
         # --- Experiment Settings ---
-        self.flowrate_list = [1]#0.25, 0.5] 
+        self.flowrate_list = [0.1, 0.25, 0.5] 
         self.runs_per_flowrate = 3 
-        self.maximum_duration_min = 0.25 
+        self.maximum_duration_min = 5 
         self.maximum_duration_s = self.maximum_duration_min * 60 
 
         # --- State Tracking Indexes ---
@@ -77,19 +77,17 @@ class DropletCounter:
         self.start_time = time.time() 
         self.droplet_count = [] 
         self.timestamps = [] 
-        self._fake_hardware_count = 0 
-
+        self.baseline_count = int(self.driver.drop_count())
         self.timer.start(5000) # Poll every 5 seconds
 
     def get_droplet_count(self):
-        drop_count = self.driver.drop_count()
-
-        
+        drop_count = int(self.driver.drop_count())
+        relative_count = drop_count - self.baseline_count
         #if not hasattr(self, '_fake_hardware_count'):
         #    self._fake_hardware_count = 0
         #self._fake_hardware_count += random.randint(0, 5) 
         try:
-            return int(drop_count)
+            return int(relative_count)
         except (TypeError, ValueError):
             return 0
     
