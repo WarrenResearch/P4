@@ -112,7 +112,7 @@ class DropletCounter:
             self.timer.stop() 
 
             # Calculate average for this specific run window
-            droplet_average = max(self.droplet_count)/self.maximum_duration_min if self.droplet_count else 0
+            droplet_average = self.droplet_count[-1]/self.maximum_duration_min if self.droplet_count else 0
             self.summary_averages[current_flowrate].append(droplet_average)
 
             print(f"-> Finished Run {run_number} (@ {current_flowrate} mL/min). Average Droplets per min: {droplet_average:.2f}")
