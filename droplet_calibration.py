@@ -35,12 +35,12 @@ class DropletCounter:
         self.calibration_start_time = time.time()
 
         self.widget = widget # holds live reference to widget (so your calibration value goes to the correct place)
-        self.reactor_volume_ml = 0.1 # change this with your volume, in my case im not using the whole reacotr for the calibration 
+        self.reactor_volume_ml = 0.1 # change this with your volume, in my case im not using the whole reactor for the calibration 
 
         # --- Experiment Settings ---
         self.flowrate_list = [0.1, 0.25, 0.5] 
         self.runs_per_flowrate = 3 
-        self.maximum_duration_min = 5 
+        self.maximum_duration_min = 3 
         self.maximum_duration_s = self.maximum_duration_min * 60 
 
         # --- State Tracking Indexes ---
@@ -68,7 +68,7 @@ class DropletCounter:
         self.widget.start()
         
         if self.current_run_idx == 0:
-            steady_state_minutes = 3 * (self.reactor_volume_ml / current_flowrate)
+            steady_state_minutes = 1 * (self.reactor_volume_ml / current_flowrate)
             steady_state_seconds = steady_state_minutes * 60
 
             QTimer.singleShot(int(steady_state_seconds*1000),self.activate_measurement_timer)
