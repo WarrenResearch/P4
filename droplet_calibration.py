@@ -32,6 +32,8 @@ class DropletCounter:
         time.sleep(2) # Give it a moment to switch modes
         self.driver.set_collect(1) 
         
+        self.calibration_start_time = time.time()
+
         self.widget = widget # holds live reference to widget (so your calibration value goes to the correct place)
         self.reactor_volume_ml = 0.1 # change this with your volume, in my case im not using the whole reacotr for the calibration 
 
@@ -144,6 +146,9 @@ class DropletCounter:
                     self.current_run_idx = 0
                     self.start_new_run()
                 else:
+                    self.calibration_end_time = time.time()
+                    total_calibration_time = self.calibration_end_time - self.calibration_start_time
+                    print(f"\nCalibration complete! Total time: {total_calibration_time/60:.2f} minutes")
                     self.driver.set_collect(0)
                     self.calibration_gradient()
                     self.disconnect_hardware()
