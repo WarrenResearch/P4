@@ -165,6 +165,9 @@ class SequenceExecutor:
         self.stop_sequence()
 
     def _advance_sequence_after_sample(self, current_row):
+        # Mark the current row complete before moving forward.
+        self.controller._apply_sequence_row_style(current_row, "completed")
+
         # Move row index forward.
         self.controller._sequence_row_index = current_row + 1
 
@@ -189,6 +192,7 @@ class SequenceExecutor:
         # Copy active row data from DataFrame.
         row_data = self.controller._sequence_df.iloc[self.controller._sequence_row_index].to_dict()
         self.controller._active_sequence_row_data = row_data
+        self.controller._apply_sequence_row_style(self.controller._sequence_row_index, "active")
 
         # While waiting for target temperature, run connected pumps at low flow.
         for pump_widget in self.controller.pump_widgets:
@@ -244,12 +248,20 @@ class SequenceExecutor:
         # Initialize sequence state and launch first row.
         self.controller._sequence_row_index = 0
         self.controller._sequence_running = True
+        self.controller._reset_sequence_row_styles()
         self._run_current_row()
         print(f"[{time.strftime('%H:%M:%S')}] Sequence started.")
         return True
 
     def stop_sequence(self):
         # Stop flag prevents further scheduled callbacks from executing sequence logic.
+        current_row = getattr(self.controller, "_sequence_row_index", None)
+        if (
+            isinstance(current_row, int)
+            and self.controller._sequence_row_states.get(current_row) == "active"
+        ):
+            self.controller._apply_sequence_row_style(current_row, "idle")
+
         self.controller._sequence_running = False
         self.controller._invalidate_sequence_callbacks()
         self.controller._cancel_sequence_timers()
