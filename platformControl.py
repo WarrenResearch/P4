@@ -1,4 +1,4 @@
-from PyQt5 import QtWidgets, QtCore
+from PyQt5 import QtWidgets, QtCore, QtGui
 import pumpWidget as pw
 import valveWidget as vw
 import thermocontrollerwidget as tcw
@@ -123,6 +123,7 @@ class PlatformControl(QtWidgets.QWidget):
         self.moveDownRowButton.clicked.connect(lambda: self.move_selected_row(1))
         self.runSequenceButton.clicked.connect(self.run_sequence)
         self.stopSequenceButton.clicked.connect(self.stop_sequence)
+        self._sequence_row_states = {}
         self.refresh_target_columns()
         self.sequence_targets_df = self.get_sequence_targets_df()
         self.targetsTable.itemChanged.connect(self._on_targets_table_changed)
@@ -301,6 +302,8 @@ class PlatformControl(QtWidgets.QWidget):
                 value = row_values.get(header, "")
                 self.targetsTable.setItem(row, col, QtWidgets.QTableWidgetItem(value))
 
+        self._reapply_sequence_row_styles()
+
     def get_sequence_targets_df(self):
         """Return Reactor Sequence table rows as a pandas DataFrame."""
 
@@ -324,6 +327,48 @@ class PlatformControl(QtWidgets.QWidget):
         self.sequence_targets_df = self.get_sequence_targets_df()
         self._sequence_df = self.sequence_targets_df.copy()
         return self.sequence_targets_df
+
+    def _sequence_row_brush(self, state):
+        if state == "active":
+            return QtGui.QBrush(QtGui.QColor("#1ba814"))
+        if state == "completed":
+            return QtGui.QBrush(QtGui.QColor("#52e34b"))
+        return QtGui.QBrush()
+
+    def _ensure_sequence_table_item(self, row, column):
+        item = self.targetsTable.item(row, column)
+        if item is None:
+            item = QtWidgets.QTableWidgetItem("")
+            self.targetsTable.setItem(row, column, item)
+        return item
+
+    def _apply_sequence_row_style(self, row, state):
+        if row < 0 or row >= self.targetsTable.rowCount():
+            return
+
+        if state == "idle":
+            self._sequence_row_states.pop(row, None)
+        else:
+            self._sequence_row_states[row] = state
+
+        brush = self._sequence_row_brush(state)
+        for column in range(self.targetsTable.columnCount()):
+            item = self._ensure_sequence_table_item(row, column)
+            item.setBackground(brush)
+
+    def _reapply_sequence_row_styles(self):
+        row_count = self.targetsTable.rowCount()
+        self._sequence_row_states = {
+            row: state for row, state in self._sequence_row_states.items() if row < row_count
+        }
+
+        for row in range(row_count):
+            self._apply_sequence_row_style(row, self._sequence_row_states.get(row, "idle"))
+
+    def _reset_sequence_row_styles(self):
+        self._sequence_row_states.clear()
+        for row in range(self.targetsTable.rowCount()):
+            self._apply_sequence_row_style(row, "idle")
 
     def _on_targets_table_changed(self, _item):
         self.upload_sequence()
