@@ -68,7 +68,7 @@ class DropletCounter:
         self.widget.start()
         
         if self.current_run_idx == 0:
-            steady_state_minutes = 1 * (self.reactor_volume_ml / current_flowrate)
+            steady_state_minutes = 3 * (self.reactor_volume_ml / current_flowrate)
             steady_state_seconds = steady_state_minutes * 60
 
             QTimer.singleShot(int(steady_state_seconds*1000),self.activate_measurement_timer)
