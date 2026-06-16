@@ -1,0 +1,34 @@
+---
+references:
+  - "File: /sequence_manager.py"
+generationTime: 2026-06-16T11:59:54.260Z
+---
+flowchart TD
+    Textbox["`**Note:** controls the sequence the reactor goes through when 
+    achieving conditions in the sequence dataframe`"]
+
+    A("run_sequence()") --> B{"Sequence DataFrame is non-empty and has a temperature column?"}
+    B -->|No| C["Return False"]
+    B -->|Yes| D["Initialize sequence state and call _run_current_row()"]
+    C --> S["Done"]
+    D --> E["Set row active, start low-flow pumps, and set target temperature"]
+    E --> F{"Target temperature present?"}
+    F -->|No| N["Sample current row and update sample count"]
+    F -->|Yes| G{"Temperature reached?"}
+    G -->|No| H["Schedule another temperature poll in 2 s"]
+    H --> G
+    G -->|Yes| I["wash_step(): start connected pumps and schedule _finish_wash_step()"]
+    I --> J{"Any pumps started?"}
+    J -->|No| S
+    J -->|Yes| K["_finish_wash_step() -> on_complete()"]
+    K --> L["Apply row flowrates and compute hold time"]
+    L --> M{"Total flow > 0?"}
+    M -->|No| P["Mark row complete and advance row index"]
+    M -->|Yes| N
+    N --> O{"More samples needed?"}
+    O -->|Yes| N
+    O -->|No| P
+    P --> Q{"More rows remain?"}
+    Q -->|Yes| D
+    Q -->|No| R["stop_sequence(): save log, reset hardware, and stop pumps"]
+    R --> S
