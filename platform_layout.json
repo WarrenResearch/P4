@@ -5,6 +5,12 @@
       "model": "Jasco PU2080",
       "com_port": "COM9",
       "calibration_factor": "1.0013"
+    },
+    {
+      "name": "Pump 2",
+      "model": "Jasco PU2080",
+      "com_port": "COM8",
+      "calibration_factor": "1"
     }
   ],
   "valves": [],
