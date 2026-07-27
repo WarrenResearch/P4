@@ -636,6 +636,7 @@ class PlatformControl(QtWidgets.QWidget):
         return total_flow_ml_min
 
     def run_sequence(self):
+        self.set_monitor_configuration()
         return self.sequence_executor.run_sequence()
 
     def stop_sequence(self):
