@@ -4,21 +4,15 @@
       "name": "Pump 1",
       "model": "Jasco PU2080",
       "com_port": "COM7",
-      "calibration_factor": "1.0042"
-    },
-    {
-      "name": "Pump 2",
-      "model": "Jasco PU2080",
-      "com_port": "COM8",
-      "calibration_factor": "1.0218"
+      "calibration_factor": "0.9891"
     }
   ],
   "valves": [],
   "thermocontroller": {
     "name": "Eurotherm 3216",
-    "com_port": "COM7",
-    "target_temp": "25.0"
+    "com_port": "COM1",
+    "target_temp": "70"
   },
-  "reactor_volume_ml": 0.3,
+  "reactor_volume_ml": 5.0,
   "fraction_delay_volume_ml": 0.556
 }
