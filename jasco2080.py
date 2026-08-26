@@ -102,7 +102,7 @@ class JascoPU2080():
 
     # ---- pressure ----
     def read_pressure(self) -> float: # returns the current pressure in bar
-        return float(self._comm("read", "a_press1 load p"))
+        return float(self._comm("read", "a_press load p"))
 
     def read_max_pressure(self) -> float: # returns the maximum pressure setting in bar
         return float(self._comm("read", "a_pmax load p"))
