@@ -127,8 +127,9 @@ class FractionCollectorHandler:
 
         # Convert requested sample volume to required sample time in seconds.
         self.controller.sample_duration = (self.controller.sample_volume / total_flow_ml_min) * 60.0
+        sample_label = getattr(self.controller, "sample_name", "Sample").strip() or "Sample"
         print(
-            f"[{time.strftime('%H:%M:%S')}] Sample duration calculated from volume/flowrate: "
+            f"[{time.strftime('%H:%M:%S')}] {sample_label} sample duration calculated from volume/flowrate: "
             f"{self.controller.sample_volume:.3f} mL / {total_flow_ml_min:.3f} mL/min = {self.controller.sample_duration:.1f} s"
         )
 

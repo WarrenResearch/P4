@@ -15,6 +15,10 @@ class PlatformConfigHandler:
         return os.path.join(os.path.dirname(__file__), "platform_layout.json")
 
     def save_platform(self):
+        # Ensure the visible table values are synced back into the in-memory list before saving.
+        if hasattr(self.controller, "_sync_sample_definitions_from_table"):
+            self.controller._sync_sample_definitions_from_table()
+
         # Collect the current settings from every pump widget.
         pumps = []
         for pump_widget in self.controller.pump_widgets:
@@ -48,6 +52,10 @@ class PlatformConfigHandler:
             "thermocontroller": thermocontroller,
             "reactor_volume_ml": self.controller.reactor_volume_ml,
             "fraction_delay_volume_ml": self.controller.fraction_delay_volume_ml,
+            "sample_definitions": list(getattr(self.controller, "sample_definitions", [])),
+            "sample_name": getattr(self.controller, "sample_name", ""),
+            "sample_volume": getattr(self.controller, "sample_volume", 0.5),
+            "sample_count": getattr(self.controller, "sample_count", 1),
         }
 
         # Save the dictionary to the JSON file.
@@ -130,3 +138,56 @@ class PlatformConfigHandler:
 
         self.controller.fraction_delay_volume_ml = fraction_delay_volume
         self.controller.fractionDelayVolumeText.setText(str(fraction_delay_volume))
+
+        # Restore sample definitions list, if present.
+        sample_definitions = data.get("sample_definitions")
+        if isinstance(sample_definitions, list) and sample_definitions:
+            self.controller.sample_definitions = []
+            for item in sample_definitions:
+                if not isinstance(item, dict):
+                    continue
+                name = str(item.get("name", "Sample")).strip() or "Sample"
+                try:
+                    volume = float(item.get("volume", self.controller.sample_volume))
+                    if volume <= 0:
+                        raise ValueError
+                except (TypeError, ValueError):
+                    volume = self.controller.sample_volume
+                try:
+                    count = int(item.get("count", self.controller.sample_count))
+                    if count <= 0:
+                        raise ValueError
+                except (TypeError, ValueError):
+                    count = self.controller.sample_count
+                self.controller.sample_definitions.append({"name": name, "volume": volume, "count": count})
+            if self.controller.sample_definitions:
+                first = self.controller.sample_definitions[0]
+                self.controller.sample_name = first["name"]
+                self.controller.sample_volume = first["volume"]
+                self.controller.sample_count = first["count"]
+        else:
+            sample_name = data.get("sample_name", getattr(self.controller, "sample_name", "Sample 1"))
+            sample_volume = data.get("sample_volume", getattr(self.controller, "sample_volume", 0.5))
+            sample_count = data.get("sample_count", getattr(self.controller, "sample_count", 1))
+            try:
+                sample_volume = float(sample_volume)
+                if sample_volume <= 0:
+                    raise ValueError
+            except (TypeError, ValueError):
+                sample_volume = getattr(self.controller, "sample_volume", 0.5)
+            try:
+                sample_count = int(sample_count)
+                if sample_count <= 0:
+                    raise ValueError
+            except (TypeError, ValueError):
+                sample_count = getattr(self.controller, "sample_count", 1)
+            self.controller.sample_definitions = [{
+                "name": str(sample_name).strip() or getattr(self.controller, "sample_name", "Sample 1"),
+                "volume": sample_volume,
+                "count": sample_count,
+            }]
+            self.controller.sample_name = self.controller.sample_definitions[0]["name"]
+            self.controller.sample_volume = self.controller.sample_definitions[0]["volume"]
+            self.controller.sample_count = self.controller.sample_definitions[0]["count"]
+
+        self.controller._refresh_sample_definitions_table()

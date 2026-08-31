@@ -1,18 +1,31 @@
 {
-  "pumps": [
-    {
-      "name": "Pump 1",
-      "model": "Jasco PU2080",
-      "com_port": "COM8",
-      "calibration_factor": "1"
-    }
-  ],
+  "pumps": [],
   "valves": [],
   "thermocontroller": {
     "name": "Eurotherm 3216",
-    "com_port": "COM5",
+    "com_port": "COM3",
     "target_temp": ""
   },
-  "reactor_volume_ml": 1.0,
-  "fraction_delay_volume_ml": 0.556
+  "reactor_volume_ml": 2,
+  "fraction_delay_volume_ml": 0.556,
+  "sample_definitions": [
+    {
+      "name": "Sample 1",
+      "volume": 0.5,
+      "count": 1
+    },
+    {
+      "name": "Sample 1",
+      "volume": 0.5,
+      "count": 1
+    },
+    {
+      "name": "Sample 1",
+      "volume": 0.5,
+      "count": 1
+    }
+  ],
+  "sample_name": "Sample 1",
+  "sample_volume": 0.5,
+  "sample_count": 1
 }

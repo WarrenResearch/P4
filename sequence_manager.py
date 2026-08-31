@@ -123,37 +123,60 @@ class SequenceExecutor:
         current_row = getattr(self.controller, "_sequence_row_index", 0)
         self._sample_current_row(current_row, 1)
 
-    def _sample_current_row(self, current_row, sample_number):
-        # Refresh sample_count from UI and validate.
-        if not self.controller.update_sample_count():
+    def _sample_current_row(self, current_row, sample_number=1, sample_index=0, sample_plan=None):
+        if sample_plan is None:
+            sample_plan = self.controller.get_sample_plan()
+
+        if not sample_plan:
             self._advance_sequence_after_sample(current_row)
             return
 
-        # Build sample identifier for logs/monitor.
-        sample_id = f"row-{current_row + 1}-sample-{sample_number}"
+        if sample_index >= len(sample_plan):
+            self._advance_sequence_after_sample(current_row)
+            return
 
-        # Trigger sampling through fraction collector handler pathway.
+        current_sample = sample_plan[sample_index]
+        sample_label = str(current_sample.get("name", "Sample")).strip() or "Sample"
+        sample_volume = float(current_sample.get("volume", self.controller.sample_volume))
+        sample_count = int(current_sample.get("count", self.controller.sample_count))
+
+        self.controller.sample_name = sample_label
+        self.controller.sample_volume = sample_volume
+        self.controller.sample_count = sample_count
+
+        sample_id = f"{sample_label}-row-{current_row + 1}-sample-{sample_number}"
+
         started = self.controller.fractioncollector_sample(
             sample_id,
-            on_complete=lambda row=current_row, sample=sample_number: self.controller._schedule_timer(
+            on_complete=lambda row=current_row, sample=sample_number, index=sample_index, plan=sample_plan: self.controller._schedule_timer(
                 1000,
-                lambda r=row, s=sample: self._after_row_sample(r, s),
+                lambda r=row, s=sample, i=index, p=plan: self._after_row_sample(r, s, i, p),
                 track_sequence=True,
             ),
             track_sequence_timer=True,
         )
 
-        # If sample failed to start, move forward instead of hanging.
         if not started:
             self._advance_sequence_after_sample(current_row)
 
-    def _after_row_sample(self, current_row, sample_number):
-        # Take more samples for the same row until sample_count is reached.
-        if sample_number < self.controller.sample_count:
-            self._sample_current_row(current_row, sample_number + 1)
+    def _after_row_sample(self, current_row, sample_number, sample_index=0, sample_plan=None):
+        if sample_plan is None:
+            sample_plan = self.controller.get_sample_plan()
+        if not sample_plan:
+            self._advance_sequence_after_sample(current_row)
             return
 
-        # All samples for this row complete; move on.
+        current_sample = sample_plan[sample_index]
+        current_count = int(current_sample.get("count", self.controller.sample_count))
+
+        if sample_number < current_count:
+            self._sample_current_row(current_row, sample_number + 1, sample_index, sample_plan)
+            return
+
+        if sample_index < len(sample_plan) - 1:
+            self._sample_current_row(current_row, 1, sample_index + 1, sample_plan)
+            return
+
         self._advance_sequence_after_sample(current_row)
 
     def _handle_sequence_complete(self):

@@ -64,9 +64,8 @@ class PlatformControl(QtWidgets.QWidget):
         self.setConfigButton.clicked.connect(self.set_monitor_configuration)
         self.valvesBox = QtWidgets.QGroupBox("Valves")
         self.valvesBox.setMaximumHeight(400)
-        self.valvesBox.setMaximumWidth(1400)
+        self.valvesBox.setMaximumWidth(2000)
         self.valvesBoxLayout = QtWidgets.QVBoxLayout(self.valvesBox)
-        self._layout.addWidget(self.valvesBox, 1, 0, QtCore.Qt.AlignTop)
 
         self.valvesHeaderLayout = QtWidgets.QHBoxLayout()
         self.addValveButton = QtWidgets.QPushButton("Add Valve")
@@ -93,7 +92,6 @@ class PlatformControl(QtWidgets.QWidget):
         self.sequenceTargetsBox = QtWidgets.QGroupBox("Reactor Sequence")
         self.sequenceTargetsBox.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.sequenceTargetsBoxLayout = QtWidgets.QVBoxLayout(self.sequenceTargetsBox)
-        self._layout.addWidget(self.sequenceTargetsBox, 1, 1, 1, 2)
 
         self.targetsTable = QtWidgets.QTableWidget(0, 2)
         self.targetsTable.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
@@ -142,24 +140,40 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractionNextPositionButton = QtWidgets.QPushButton("Move to Next Position")
         self.fractionCleanButton = QtWidgets.QPushButton("Clean Dead Volume")
 
-        self.sampleVolumeLabel = QtWidgets.QLabel("Sample Volume (ml)")
-        self.sampleVolumeText = QtWidgets.QLineEdit("0.5")
-        self.sample_volume = 0.5
-        self.sample_duration = 0.0
-
-        self.sample_count = 1
-        self.sampleCountLabel = QtWidgets.QLabel("Sample count")
-        self.sampleCountText = QtWidgets.QLineEdit("1")
-
         self.reactor_volume_ml = 2
         self.reactorVolumeLabel = QtWidgets.QLabel("Reactor Volume (ml)")
         self.reactorVolumeText = QtWidgets.QLineEdit("2")
-        
-    
+
         self.fraction_delay_volume_ml = 0.556
         self.fractionDelayVolumeLabel = QtWidgets.QLabel("Delay Volume (ml)")
         self.fractionDelayVolumeText = QtWidgets.QLineEdit("0.556")
-        
+
+        self.samplePlanBox = QtWidgets.QGroupBox("Samples")
+        self.samplePlanBox.setMaximumHeight(420)
+        self.samplePlanBox.setMaximumWidth(340)
+        self.samplePlanBoxLayout = QtWidgets.QVBoxLayout(self.samplePlanBox)
+
+        self.sample_name = "Sample 1"
+        self.sample_volume = 0.5
+        self.sample_duration = 0.0
+        self.sample_count = 1
+
+        self.sampleDefinitionsTable = QtWidgets.QTableWidget(0, 3)
+        self.sampleDefinitionsTable.setHorizontalHeaderLabels(["Sample name", "Volume (mL)", "Count"])
+        self.sampleDefinitionsTable.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
+        self.sampleDefinitionsTable.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.sampleDefinitionsTable.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.sampleDefinitionsTable.itemChanged.connect(self._sync_sample_definitions_from_table)
+
+        self.addSampleDefinitionButton = QtWidgets.QPushButton("Add sample")
+        self.removeSampleDefinitionButton = QtWidgets.QPushButton("Remove sample")
+        self.sample_definitions = []
+        self._refresh_sample_definitions_table()
+
+        self.samplePlanBoxLayout.addWidget(self.addSampleDefinitionButton)
+        self.samplePlanBoxLayout.addWidget(self.removeSampleDefinitionButton)
+        self.samplePlanBoxLayout.addWidget(self.sampleDefinitionsTable)
+        self.samplePlanBoxLayout.addStretch(1)
 
         self.fractioncollectorBoxLayout.addWidget(self.fractionConnectButton)
         self.fractioncollectorBoxLayout.addWidget(self.fractionDisconnectButton)
@@ -168,10 +182,6 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractioncollectorBoxLayout.addWidget(self.fractionMoveButton)
         self.fractioncollectorBoxLayout.addWidget(self.fractionResetButton)
         self.fractioncollectorBoxLayout.addWidget(self.fractionNextPositionButton)
-        self.fractioncollectorBoxLayout.addWidget(self.sampleVolumeLabel)
-        self.fractioncollectorBoxLayout.addWidget(self.sampleVolumeText)
-        self.fractioncollectorBoxLayout.addWidget(self.sampleCountLabel)
-        self.fractioncollectorBoxLayout.addWidget(self.sampleCountText)
         self.fractioncollectorBoxLayout.addWidget(self.reactorVolumeLabel)
         self.fractioncollectorBoxLayout.addWidget(self.reactorVolumeText)
         self.fractioncollectorBoxLayout.addWidget(self.fractionDelayVolumeLabel)
@@ -186,13 +196,16 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractionResetButton.clicked.connect(self.reset_fraction_collector)
         self.fractionDisconnectButton.clicked.connect(self.disconnect_fraction_collector)
         self.fractionNextPositionButton.clicked.connect(self.move_to_next_position)
-        self.sampleVolumeText.editingFinished.connect(self.update_sample_volume)
-        self.sampleCountText.editingFinished.connect(self.update_sample_count)
+        self.addSampleDefinitionButton.clicked.connect(self.add_sample_definition)
+        self.removeSampleDefinitionButton.clicked.connect(self.remove_sample_definition)
         self.reactorVolumeText.editingFinished.connect(self.update_reactor_volume)
         self.fractionDelayVolumeText.editingFinished.connect(self.update_fraction_delay_volume)
         self.fractionCleanButton.clicked.connect(self.clean_dead_volume)
 
         self._layout.addWidget(self.fractioncollectorBox, 0, 1, 1, 1, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
+        self._layout.addWidget(self.samplePlanBox, 1, 1, 1, 1, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
+        self._layout.addWidget(self.valvesBox, 1, 0, QtCore.Qt.AlignTop | QtCore.Qt.AlignLeft)
+        self._layout.addWidget(self.sequenceTargetsBox, 1, 2, 1, 2)
 
         self._sequence_running = False
         self._sequence_callback_token = 0
@@ -487,33 +500,105 @@ class PlatformControl(QtWidgets.QWidget):
         QtCore.QTimer.singleShot(max(0, int(delay_ms)), callback)
         return None
 
-    def update_sample_volume(self):
-        value_text = self.sampleVolumeText.text().strip()
-        try:
-            value = float(value_text)
-            if value <= 0:
-                raise ValueError
-        except ValueError:
-            QtWidgets.QMessageBox.warning(self, "Sample volume", "Enter a positive number of milliliters.")
-            self.sampleVolumeText.setText(str(self.sample_volume))
-            return False
+    def update_sample_name(self):
+        self._sync_sample_definitions_from_table()
+        return True
 
-        self.sample_volume = value
+    def update_sample_volume(self):
+        self._sync_sample_definitions_from_table()
         return True
 
     def update_sample_count(self):
-        value_text = self.sampleCountText.text().strip()
-        try:
-            value = int(value_text)
-            if value <= 0:
-                raise ValueError
-        except ValueError:
-            QtWidgets.QMessageBox.warning(self, "Sample count", "Enter a positive whole number of samples.")
-            self.sampleCountText.setText(str(self.sample_count))
+        self._sync_sample_definitions_from_table()
+        return True
+
+    def _sync_sample_definitions_from_table(self):
+        definitions = []
+        for row_index in range(self.sampleDefinitionsTable.rowCount()):
+            name_item = self.sampleDefinitionsTable.item(row_index, 0)
+            volume_item = self.sampleDefinitionsTable.item(row_index, 1)
+            count_item = self.sampleDefinitionsTable.item(row_index, 2)
+
+            name = (name_item.text().strip() if name_item is not None else "").strip() or "Sample"
+            try:
+                volume = float((volume_item.text().strip() if volume_item is not None else "0.5"))
+                if volume <= 0:
+                    raise ValueError
+            except ValueError:
+                volume = 0.5
+
+            try:
+                count = int((count_item.text().strip() if count_item is not None else "1"))
+                if count <= 0:
+                    raise ValueError
+            except ValueError:
+                count = 1
+
+            definitions.append({"name": name, "volume": volume, "count": count})
+
+        self.sample_definitions = definitions
+        if definitions:
+            first = definitions[0]
+            self.sample_name = first["name"]
+            self.sample_volume = first["volume"]
+            self.sample_count = first["count"]
+        return definitions
+
+    def add_sample_definition(self):
+        self._sync_sample_definitions_from_table()
+        row_index = len(self.sample_definitions)
+
+        default_name = f"Sample {row_index + 1}"
+        default_volume = 0.5
+        default_count = 1
+
+        if self.sample_definitions:
+            last_sample = self.sample_definitions[-1]
+            default_name = str(last_sample.get("name", default_name))
+            default_volume = float(last_sample.get("volume", default_volume))
+            default_count = int(last_sample.get("count", default_count))
+
+        new_sample = {"name": default_name, "volume": default_volume, "count": default_count}
+        self.sample_definitions.insert(row_index, new_sample)
+        self._refresh_sample_definitions_table()
+        self.sample_name = default_name
+        self.sample_volume = default_volume
+        self.sample_count = default_count
+        return True
+
+    def remove_sample_definition(self):
+        selected_row = self.sampleDefinitionsTable.currentRow()
+        if selected_row < 0:
+            QtWidgets.QMessageBox.warning(self, "Sample list", "Select a sample row to remove.")
             return False
 
-        self.sample_count = value
+        self.sampleDefinitionsTable.removeRow(selected_row)
+        if 0 <= selected_row < len(self.sample_definitions):
+            del self.sample_definitions[selected_row]
+        if self.sample_definitions:
+            first = self.sample_definitions[0]
+            self.sample_name = first["name"]
+            self.sample_volume = first["volume"]
+            self.sample_count = first["count"]
         return True
+
+    def _refresh_sample_definitions_table(self):
+        self.sampleDefinitionsTable.blockSignals(True)
+        self.sampleDefinitionsTable.setRowCount(len(self.sample_definitions))
+        for row_index, sample in enumerate(self.sample_definitions):
+            name_item = QtWidgets.QTableWidgetItem(str(sample.get("name", f"Sample {row_index + 1}")))
+            volume_item = QtWidgets.QTableWidgetItem(str(sample.get("volume", 0.5)))
+            count_item = QtWidgets.QTableWidgetItem(str(sample.get("count", 1)))
+            name_item.setFlags(name_item.flags() | QtCore.Qt.ItemIsEditable)
+            volume_item.setFlags(volume_item.flags() | QtCore.Qt.ItemIsEditable)
+            count_item.setFlags(count_item.flags() | QtCore.Qt.ItemIsEditable)
+            self.sampleDefinitionsTable.setItem(row_index, 0, name_item)
+            self.sampleDefinitionsTable.setItem(row_index, 1, volume_item)
+            self.sampleDefinitionsTable.setItem(row_index, 2, count_item)
+        self.sampleDefinitionsTable.blockSignals(False)
+
+    def get_sample_plan(self):
+        return self._sync_sample_definitions_from_table()
 
     def update_reactor_volume(self):
         value_text = self.reactorVolumeText.text().strip()
