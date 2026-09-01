@@ -100,7 +100,7 @@ class StoppedFlowDLS(QtWidgets.QWidget):
 
         # Calculate time to replace dead volume before water dilution
         DLSdilutionWaitTime = 60*polymerReplacementVolume/flowRate
-        print(f'Replacing polymer before diluting for {DLSdilutionWaitTime} seconds...')
+        print(f'Replacing polymer before diluting for {DLSdilutionWaitTime / 60:.1f} min(s)...')
         DLSsamplingTimeStart = datetime.now()
         while not self.main.methodHandler.stopThread and (datetime.now() - DLSsamplingTimeStart).seconds < DLSdilutionWaitTime:
             time.sleep(1)
@@ -112,7 +112,7 @@ class StoppedFlowDLS(QtWidgets.QWidget):
         DLSsteadyStateTime = 3.5*DLSdeadVolume/(self.DLSflowRate + flowRate)
 
         # Get sample to the DLS flow cell
-        print(f'Diluting to steady-state for {60*DLSsteadyStateTime} seconds')
+        print(f'Diluting to steady-state for {DLSsteadyStateTime:.1f} min(s)')
         DLSsamplingTimeStart = datetime.now()
         while not self.main.methodHandler.stopThread and (datetime.now() - DLSsamplingTimeStart).seconds < 60*DLSsteadyStateTime:
             time.sleep(1)
