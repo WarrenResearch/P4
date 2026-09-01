@@ -113,6 +113,7 @@ class SequenceExecutor:
         print(
             f"[{time.strftime('%H:%M:%S')}] Row hold started at total flow {total_flow_ml_min:.3f} mL/min for "
             f"{hold_volume_ml:.2f} mL ({hold_duration_s / 60:.1f} min(s)) (reactor volume x3 + delay volume included)."
+            f" Sample will be collected: {time.strftime('%H:%M:%S', time.localtime(time.time() + hold_duration_s))}."
         )
 
         # After hold time, move to row sampling.
