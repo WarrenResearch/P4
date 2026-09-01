@@ -109,8 +109,19 @@ class FractionCollectorHandler:
         self.move_fraction_collector()
 
     def fractioncollector_sample(self, sample_id, on_complete=None, track_sequence_timer=False):
-        # Validate sample volume from UI.
-        if not self.controller.update_sample_volume():
+        # Validate the sample volume set for this sample. The caller (sequence
+        # executor) picks the volume from the current sample-plan row and assigns
+        # it to controller.sample_volume, so validate that value directly rather
+        # than re-syncing from the table (which would reset it to the first row).
+        try:
+            if float(self.controller.sample_volume) <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            QtWidgets.QMessageBox.warning(
+                self.controller,
+                "Sample volume",
+                "Enter a positive sample volume in millilitres.",
+            )
             return False
 
         # Sum all pump flowrates.
