@@ -30,7 +30,7 @@ class PicoGPC(QObject):
 
     def measure(self, run_time): # Opens new thread for RI_Signal measurement  
         self.run_time = run_time
-        print("runtime", self.run_time)
+        print(f"runtime {self.run_time / 60:.1f} min(s)")
         self.timer = threading.Timer(self.run_time, self.delayed_return)
         self.timer.start() # Start the timer
         if self.tc08usbConnected:

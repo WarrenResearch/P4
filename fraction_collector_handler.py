@@ -141,7 +141,7 @@ class FractionCollectorHandler:
         sample_label = getattr(self.controller, "sample_name", "Sample").strip() or "Sample"
         print(
             f"[{time.strftime('%H:%M:%S')}] {sample_label} sample duration calculated from volume/flowrate: "
-            f"{self.controller.sample_volume:.3f} mL / {total_flow_ml_min:.3f} mL/min = {self.controller.sample_duration:.1f} s"
+            f"{self.controller.sample_volume:.3f} mL / {total_flow_ml_min:.3f} mL/min = {self.controller.sample_duration / 60:.1f} min(s)"
         )
 
         # Guard clause: if connection cannot be established, abort sampling.
@@ -184,7 +184,7 @@ class FractionCollectorHandler:
                 on_complete()
             return
 
-        print(f"[{time.strftime('%H:%M:%S')}] Starting sample collection for {self.controller.sample_duration:.1f} s.")
+        print(f"[{time.strftime('%H:%M:%S')}] Starting sample collection for {self.controller.sample_duration / 60:.1f} min(s).")
 
         # Schedule stop after computed duration.
         duration_ms = max(0, int(self.controller.sample_duration * 1000))
@@ -268,7 +268,7 @@ class FractionCollectorHandler:
             return False
 
         clean_duration_ms = int((controller_dead_volume / flowrate) * 60 * 1000)
-        print(f"[{time.strftime('%H:%M:%S')}] Calculated clean duration: {clean_duration_ms} ms based on flowrate and dead volume.")
+        print(f"[{time.strftime('%H:%M:%S')}] Calculated clean duration: {clean_duration_ms / 60000:.1f} min(s) based on flowrate and dead volume.")
 
         try:
             # Move the head to waste before flushing the dead volume.
