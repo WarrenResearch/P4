@@ -139,6 +139,7 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractionResetButton = QtWidgets.QPushButton("Reset (HOME)")
         self.fractionNextPositionButton = QtWidgets.QPushButton("Move to Next Position")
         self.fractionCleanButton = QtWidgets.QPushButton("Clean Dead Volume")
+        self.fractionSampleButton = QtWidgets.QPushButton("Sample")
 
         self.reactor_volume_ml = 2
         self.reactorVolumeLabel = QtWidgets.QLabel("Reactor Volume (ml)")
@@ -187,6 +188,7 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractioncollectorBoxLayout.addWidget(self.fractionDelayVolumeLabel)
         self.fractioncollectorBoxLayout.addWidget(self.fractionDelayVolumeText)
         self.fractioncollectorBoxLayout.addWidget(self.fractionCleanButton)
+        self.fractioncollectorBoxLayout.addWidget(self.fractionSampleButton)
         self.fractioncollectorBoxLayout.addStretch(1)
 
 
@@ -201,6 +203,7 @@ class PlatformControl(QtWidgets.QWidget):
         self.reactorVolumeText.editingFinished.connect(self.update_reactor_volume)
         self.fractionDelayVolumeText.editingFinished.connect(self.update_fraction_delay_volume)
         self.fractionCleanButton.clicked.connect(self.clean_dead_volume)
+        self.fractionSampleButton.clicked.connect(self.run_sample_plan)
 
         self._layout.addWidget(self.fractioncollectorBox, 0, 1, 1, 1, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
         self._layout.addWidget(self.samplePlanBox, 1, 1, 1, 1, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
@@ -684,6 +687,9 @@ class PlatformControl(QtWidgets.QWidget):
     
     def fractioncollector_sample(self, sample_id, on_complete=None, track_sequence_timer=False):
         return self.fraction_handler.fractioncollector_sample(sample_id, on_complete, track_sequence_timer)
+
+    def run_sample_plan(self):
+        return self.fraction_handler.run_sample_plan()
 
     def _start_fractioncollector_collection(self, sample_id, total_flow_ml_min, on_complete=None, track_sequence_timer=False):
         return self.fraction_handler._start_fractioncollector_collection(sample_id, total_flow_ml_min, on_complete, track_sequence_timer)

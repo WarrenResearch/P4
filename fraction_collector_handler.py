@@ -108,6 +108,58 @@ class FractionCollectorHandler:
         self.controller.fractionMovePositionText.setText("HOME")
         self.move_fraction_collector()
 
+    def run_sample_plan(self, on_complete=None):
+        # Standalone sampling triggered from the Fraction Collector widget.
+        # Works through every sample defined in the sample table, honouring each
+        # sample's volume and count, and using the summed current pump flowrates
+        # (fractioncollector_sample handles the volume/flowrate -> duration math).
+        sample_plan = self.controller._sync_sample_definitions_from_table()
+
+        if not sample_plan:
+            print("Please add samples to sample table")
+            return False
+
+        total_flow_ml_min = self.controller._get_total_current_flowrate_ml_min()
+        if total_flow_ml_min <= 0:
+            QtWidgets.QMessageBox.warning(
+                self.controller,
+                "Sample duration",
+                "Cannot calculate sample duration: total flowrate must be greater than 0 mL/min.",
+            )
+            return False
+
+        def _run_sample(sample_index, sample_number):
+            if sample_index >= len(sample_plan):
+                print(f"[{time.strftime('%H:%M:%S')}] Sample plan complete.")
+                if callable(on_complete):
+                    on_complete()
+                return
+
+            current_sample = sample_plan[sample_index]
+            sample_label = str(current_sample.get("name", "Sample")).strip() or "Sample"
+            sample_volume = float(current_sample.get("volume", self.controller.sample_volume))
+            sample_count = int(current_sample.get("count", self.controller.sample_count))
+
+            self.controller.sample_name = sample_label
+            self.controller.sample_volume = sample_volume
+            self.controller.sample_count = sample_count
+
+            sample_id = f"{sample_label}-sample-{sample_number}"
+
+            def _next():
+                if sample_number < sample_count:
+                    self.controller._schedule_timer(1000, lambda: _run_sample(sample_index, sample_number + 1))
+                else:
+                    self.controller._schedule_timer(1000, lambda: _run_sample(sample_index + 1, 1))
+
+            started = self.fractioncollector_sample(sample_id, on_complete=_next)
+            if not started:
+                # Skip to the next distinct sample if this one could not start.
+                self.controller._schedule_timer(1000, lambda: _run_sample(sample_index + 1, 1))
+
+        _run_sample(0, 1)
+        return True
+
     def fractioncollector_sample(self, sample_id, on_complete=None, track_sequence_timer=False):
         # Validate the sample volume set for this sample. The caller (sequence
         # executor) picks the volume from the current sample-plan row and assigns
