@@ -200,6 +200,7 @@ class DropletCounter:
     def calibration_factor(self):
         expected_gradient = 59.127 # calibration of pump fr vs droplet count
         correction_factor = expected_gradient / self.master_records[0]['Calibration Gradient']
+        self.master_records.append({'Calibration Factor': round(correction_factor,4)})
         return correction_factor
     
     def disconnect_hardware(self):
