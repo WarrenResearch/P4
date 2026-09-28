@@ -105,35 +105,69 @@ class SequenceExecutor:
             self._on_row_complete()
             return
 
-        # Hold volume includes 3 reactor volumes plus downstream delay volume.
-        hold_volume_ml = (3.0 * float(self.controller.reactor_volume_ml)) + self.controller.fraction_delay_volume_ml
-        hold_duration_s = (hold_volume_ml / total_flow_ml_min) * 60.0
-        hold_duration_ms = int(hold_duration_s * 1000)
+        # The full sample plan is run once at each chosen reactor volume (e.g. 3, 3.5, 4).
+        # All sampling times are measured from the start of this hold, so time spent
+        # sampling at one point does not push back the next point.
+        self._row_sampling_volumes = list(getattr(self.controller, "sampling_reactor_volumes", [3.0])) or [3.0]
+        self._row_hold_start_s = time.time()
+        self._row_hold_flow_ml_min = total_flow_ml_min
 
         print(
-            f"[{time.strftime('%H:%M:%S')}] Row hold started at total flow {total_flow_ml_min:.3f} mL/min for "
-            f"{hold_volume_ml:.2f} mL ({hold_duration_s / 60:.1f} min(s)) (reactor volume x3 + delay volume included)."
-            f" Sample will be collected: {time.strftime('%H:%M:%S', time.localtime(time.time() + hold_duration_s))}."
+            f"[{time.strftime('%H:%M:%S')}] Row hold started at total flow {total_flow_ml_min:.3f} mL/min. "
+            f"Sampling at reactor volumes: {', '.join(f'{v:g}' for v in self._row_sampling_volumes)} (delay volume included)."
         )
 
-        # After hold time, move to row sampling.
-        self.controller._schedule_timer(hold_duration_ms, self._on_row_complete, track_sequence=True)
+        current_row = getattr(self.controller, "_sequence_row_index", 0)
+        self._schedule_sampling_point(current_row, 0)
+
+    def _schedule_sampling_point(self, current_row, point_index):
+        # Hold volume is the chosen number of reactor volumes plus downstream delay volume.
+        reactor_volumes = self._row_sampling_volumes[point_index]
+        hold_volume_ml = (reactor_volumes * float(self.controller.reactor_volume_ml)) + self.controller.fraction_delay_volume_ml
+        sample_time_s = self._row_hold_start_s + (hold_volume_ml / self._row_hold_flow_ml_min) * 60.0
+        wait_s = max(0.0, sample_time_s - time.time())
+
+        if wait_s == 0.0 and point_index > 0:
+            print(
+                f"[{time.strftime('%H:%M:%S')}] Sampling at {reactor_volumes:g} reactor volumes is overdue "
+                f"(previous samples ran long); sampling now."
+            )
+        else:
+            print(
+                f"[{time.strftime('%H:%M:%S')}] Next sample at {reactor_volumes:g} reactor volumes "
+                f"({hold_volume_ml:.2f} mL from hold start, {wait_s / 60:.1f} min(s) from now). "
+                f"Sample will be collected: {time.strftime('%H:%M:%S', time.localtime(time.time() + wait_s))}."
+            )
+
+        self.controller._schedule_timer(
+            int(wait_s * 1000),
+            lambda row=current_row, point=point_index: self._sample_current_row(row, 1, 0, None, point),
+            track_sequence=True,
+        )
 
     def _on_row_complete(self):
-        # Start sampling sequence for current row.
+        # Start sampling sequence for current row (single pass, no reactor volume timing).
         current_row = getattr(self.controller, "_sequence_row_index", 0)
         self._sample_current_row(current_row, 1)
 
-    def _sample_current_row(self, current_row, sample_number=1, sample_index=0, sample_plan=None):
+    def _finish_sampling_point(self, current_row, point_index=None):
+        # Move to the next reactor volume sampling point for this row, or advance to the next row.
+        if point_index is not None and point_index + 1 < len(self._row_sampling_volumes):
+            self._schedule_sampling_point(current_row, point_index + 1)
+            return
+
+        self._advance_sequence_after_sample(current_row)
+
+    def _sample_current_row(self, current_row, sample_number=1, sample_index=0, sample_plan=None, point_index=None):
         if sample_plan is None:
             sample_plan = self.controller.get_sample_plan()
 
         if not sample_plan:
-            self._advance_sequence_after_sample(current_row)
+            self._finish_sampling_point(current_row, point_index)
             return
 
         if sample_index >= len(sample_plan):
-            self._advance_sequence_after_sample(current_row)
+            self._finish_sampling_point(current_row, point_index)
             return
 
         current_sample = sample_plan[sample_index]
@@ -145,13 +179,14 @@ class SequenceExecutor:
         self.controller.sample_volume = sample_volume
         self.controller.sample_count = sample_count
 
-        sample_id = f"{sample_label}-row-{current_row + 1}-sample-{sample_number}"
+        volume_tag = f"-{self._row_sampling_volumes[point_index]:g}RV" if point_index is not None else ""
+        sample_id = f"{sample_label}-row-{current_row + 1}{volume_tag}-sample-{sample_number}"
 
         started = self.controller.fractioncollector_sample(
             sample_id,
-            on_complete=lambda row=current_row, sample=sample_number, index=sample_index, plan=sample_plan: self.controller._schedule_timer(
+            on_complete=lambda row=current_row, sample=sample_number, index=sample_index, plan=sample_plan, point=point_index: self.controller._schedule_timer(
                 1000,
-                lambda r=row, s=sample, i=index, p=plan: self._after_row_sample(r, s, i, p),
+                lambda r=row, s=sample, i=index, p=plan, pt=point: self._after_row_sample(r, s, i, p, pt),
                 track_sequence=True,
             ),
             track_sequence_timer=True,
@@ -160,25 +195,25 @@ class SequenceExecutor:
         if not started:
             self._advance_sequence_after_sample(current_row)
 
-    def _after_row_sample(self, current_row, sample_number, sample_index=0, sample_plan=None):
+    def _after_row_sample(self, current_row, sample_number, sample_index=0, sample_plan=None, point_index=None):
         if sample_plan is None:
             sample_plan = self.controller.get_sample_plan()
         if not sample_plan:
-            self._advance_sequence_after_sample(current_row)
+            self._finish_sampling_point(current_row, point_index)
             return
 
         current_sample = sample_plan[sample_index]
         current_count = int(current_sample.get("count", self.controller.sample_count))
 
         if sample_number < current_count:
-            self._sample_current_row(current_row, sample_number + 1, sample_index, sample_plan)
+            self._sample_current_row(current_row, sample_number + 1, sample_index, sample_plan, point_index)
             return
 
         if sample_index < len(sample_plan) - 1:
-            self._sample_current_row(current_row, 1, sample_index + 1, sample_plan)
+            self._sample_current_row(current_row, 1, sample_index + 1, sample_plan, point_index)
             return
 
-        self._advance_sequence_after_sample(current_row)
+        self._finish_sampling_point(current_row, point_index)
 
     def _handle_sequence_complete(self):
         # If sequence already stopped, do nothing.

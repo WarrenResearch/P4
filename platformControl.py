@@ -149,6 +149,12 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractionDelayVolumeLabel = QtWidgets.QLabel("Delay Volume (ml)")
         self.fractionDelayVolumeText = QtWidgets.QLineEdit("0.556")
 
+        # Reactor volumes (after the wash step) at which the sample plan is run, e.g. "3, 3.5, 4".
+        self.sampling_reactor_volumes = [3.0]
+        self.samplingReactorVolumesLabel = QtWidgets.QLabel("Sample at reactor volumes")
+        self.samplingReactorVolumesText = QtWidgets.QLineEdit("3")
+        self.samplingReactorVolumesText.setToolTip("Comma-separated list, e.g. 3, 3.5, 4. The full sample plan runs at each.")
+
         self.samplePlanBox = QtWidgets.QGroupBox("Samples")
         self.samplePlanBox.setMaximumHeight(420)
         self.samplePlanBox.setMaximumWidth(340)
@@ -187,6 +193,8 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractioncollectorBoxLayout.addWidget(self.reactorVolumeText)
         self.fractioncollectorBoxLayout.addWidget(self.fractionDelayVolumeLabel)
         self.fractioncollectorBoxLayout.addWidget(self.fractionDelayVolumeText)
+        self.fractioncollectorBoxLayout.addWidget(self.samplingReactorVolumesLabel)
+        self.fractioncollectorBoxLayout.addWidget(self.samplingReactorVolumesText)
         self.fractioncollectorBoxLayout.addWidget(self.fractionCleanButton)
         self.fractioncollectorBoxLayout.addWidget(self.fractionSampleButton)
         self.fractioncollectorBoxLayout.addStretch(1)
@@ -202,6 +210,7 @@ class PlatformControl(QtWidgets.QWidget):
         self.removeSampleDefinitionButton.clicked.connect(self.remove_sample_definition)
         self.reactorVolumeText.editingFinished.connect(self.update_reactor_volume)
         self.fractionDelayVolumeText.editingFinished.connect(self.update_fraction_delay_volume)
+        self.samplingReactorVolumesText.editingFinished.connect(self.update_sampling_reactor_volumes)
         self.fractionCleanButton.clicked.connect(self.clean_dead_volume)
         self.fractionSampleButton.clicked.connect(self.run_sample_plan)
 
@@ -629,6 +638,29 @@ class PlatformControl(QtWidgets.QWidget):
             return False
 
         self.fraction_delay_volume_ml = value
+        return True
+
+    @staticmethod
+    def parse_sampling_reactor_volumes(value):
+        # Accept "3, 3.5, 4" or a list; returns a sorted, de-duplicated list of positive floats.
+        items = value.replace(";", ",").split(",") if isinstance(value, str) else list(value)
+        volumes = sorted({float(item) for item in items if str(item).strip() != ""})
+        if not volumes or volumes[0] <= 0:
+            raise ValueError
+        return volumes
+
+    def update_sampling_reactor_volumes(self):
+        try:
+            volumes = self.parse_sampling_reactor_volumes(self.samplingReactorVolumesText.text())
+        except (TypeError, ValueError):
+            QtWidgets.QMessageBox.warning(
+                self, "Sampling reactor volumes", "Enter one or more positive numbers separated by commas, e.g. 3, 3.5, 4."
+            )
+            self.samplingReactorVolumesText.setText(", ".join(f"{v:g}" for v in self.sampling_reactor_volumes))
+            return False
+
+        self.sampling_reactor_volumes = volumes
+        self.samplingReactorVolumesText.setText(", ".join(f"{v:g}" for v in volumes))
         return True
 
     def _get_total_current_flowrate_ml_min(self): #cycles through the pump widgets and sums the current flowrate values to calculate total flowrate in mL/min for use in sample duration calculation

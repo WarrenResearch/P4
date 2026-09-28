@@ -52,6 +52,7 @@ class PlatformConfigHandler:
             "thermocontroller": thermocontroller,
             "reactor_volume_ml": self.controller.reactor_volume_ml,
             "fraction_delay_volume_ml": self.controller.fraction_delay_volume_ml,
+            "sampling_reactor_volumes": list(getattr(self.controller, "sampling_reactor_volumes", [3.0])),
             "sample_definitions": list(getattr(self.controller, "sample_definitions", [])),
             "sample_name": getattr(self.controller, "sample_name", ""),
             "sample_volume": getattr(self.controller, "sample_volume", 0.5),
@@ -138,6 +139,16 @@ class PlatformConfigHandler:
 
         self.controller.fraction_delay_volume_ml = fraction_delay_volume
         self.controller.fractionDelayVolumeText.setText(str(fraction_delay_volume))
+
+        # Restore sampling reactor volumes, but fall back to the current value if saved data is invalid.
+        sampling_volumes = data.get("sampling_reactor_volumes", self.controller.sampling_reactor_volumes)
+        try:
+            sampling_volumes = self.controller.parse_sampling_reactor_volumes(sampling_volumes)
+        except (TypeError, ValueError):
+            sampling_volumes = self.controller.sampling_reactor_volumes
+
+        self.controller.sampling_reactor_volumes = sampling_volumes
+        self.controller.samplingReactorVolumesText.setText(", ".join(f"{v:g}" for v in sampling_volumes))
 
         # Restore sample definitions list, if present.
         sample_definitions = data.get("sample_definitions")
