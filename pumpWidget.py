@@ -7,6 +7,12 @@ import milliGAT_pump
 import chemyxFusion4kX
 import chemyxFusion6kX
 import jasco2080
+import datetime
+import json
+import os
+
+CALIBRATION_HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "calibration_history.json")
+CALIBRATION_HISTORY_LENGTH = 5 # saved calibrations kept per pump
 
 class PumpControl(QtWidgets.QWidget):
     def __init__(self, parent, pumpName:any):
@@ -134,6 +140,19 @@ class PumpControl(QtWidgets.QWidget):
         self.pumpCalibrateButton.setStyleSheet("background-color: #2f6f9f;" "color: white;" "border-radius:5px")
         self.pumpCalibrateButton.setHidden(True)
 
+        self.calibrationMethodCombo = QtWidgets.QComboBox(self)
+        self.calibrationMethodCombo.addItems(["Droplet counter", "Mass balance"])
+        self.calibrationMethodCombo.setToolTip("Calibration strategy")
+        self.calibrationMethodCombo.setStyleSheet("background-color: rgb(210, 210, 210);" "color: black;" "border-radius:5px")
+        self.calibrationMethodCombo.setFixedSize(120, 20)
+        self.calibrationMethodCombo.setHidden(True)
+
+        self.calibrationHistoryCombo = QtWidgets.QComboBox(self)
+        self.calibrationHistoryCombo.setToolTip("Last saved calibrations for this pump name - select one to apply it")
+        self.calibrationHistoryCombo.setStyleSheet("background-color: rgb(210, 210, 210);" "color: black;" "border-radius:5px")
+        self.calibrationHistoryCombo.setFixedSize(175, 20)
+        self.calibrationHistoryCombo.setHidden(True)
+
         self.layout = QtWidgets.QVBoxLayout()
         self.setLayout(self.layout)
 
@@ -165,12 +184,14 @@ class PumpControl(QtWidgets.QWidget):
         self.grid.addWidget(self.calibrationFactorLabel, 12, 0)
         self.grid.addWidget(self.calibrationFactorText, 13, 0)
         self.grid.addWidget(self.pumpCalibrateButton, 13, 1)
-        self.grid.addWidget(self.pumpStartButton, 14, 0)
-        self.grid.addWidget(self.pumpStartButton_1, 14, 0)
-        self.grid.addWidget(self.pumpStartButton_2, 14, 4)
-        self.grid.addWidget(self.pumpStopButton, 15, 0)
-        self.grid.addWidget(self.pumpStopButton_1, 15, 0)
-        self.grid.addWidget(self.pumpStopButton_2, 15, 4)
+        self.grid.addWidget(self.calibrationMethodCombo, 14, 0, 1, 2)
+        self.grid.addWidget(self.calibrationHistoryCombo, 15, 0, 1, 2)
+        self.grid.addWidget(self.pumpStartButton, 16, 0)
+        self.grid.addWidget(self.pumpStartButton_1, 16, 0)
+        self.grid.addWidget(self.pumpStartButton_2, 16, 4)
+        self.grid.addWidget(self.pumpStopButton, 17, 0)
+        self.grid.addWidget(self.pumpStopButton_1, 17, 0)
+        self.grid.addWidget(self.pumpStopButton_2, 17, 4)
         self.grid.setHorizontalSpacing(5)
         self.grid.setVerticalSpacing(5)
         self.grid.setAlignment(QtCore.Qt.AlignCenter)
@@ -181,7 +202,9 @@ class PumpControl(QtWidgets.QWidget):
         self.pumpStartButton.pressed.connect(self.start)
         self.pumpStopButton.pressed.connect(self.stop)
         self.pumpCalibrateButton.pressed.connect(self.calibrate)
+        self.calibrationHistoryCombo.activated.connect(self._apply_saved_calibration)
         self.nameEdit.textChanged.connect(self._on_name_changed)
+        self._refresh_calibration_history()
 
         self.timer = QtCore.QTimer()
         self.timer.setInterval(2000)
@@ -192,7 +215,53 @@ class PumpControl(QtWidgets.QWidget):
         name = text.strip() or self._default_name
         self.pumpName = f"{self._name_prefix}{name}"
         self.pumpGroupBox.setTitle(self.pumpName)
-        
+        self._refresh_calibration_history()
+
+    def _calibration_history_key(self):
+        # Saved calibrations are stored against the pump name
+        return self.nameEdit.text().strip() or self._default_name
+
+    def _load_calibration_history(self):
+        try:
+            with open(CALIBRATION_HISTORY_FILE, "r", encoding="utf-8") as file_handle:
+                history = json.load(file_handle)
+            return history if isinstance(history, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def _refresh_calibration_history(self):
+        entries = self._load_calibration_history().get(self._calibration_history_key(), [])
+        self.calibrationHistoryCombo.clear()
+        self.calibrationHistoryCombo.addItem("Saved calibrations")
+        for entry in entries:
+            self.calibrationHistoryCombo.addItem(f"{entry['factor']:.4f}  ({entry['date']})", entry["factor"])
+
+    def _apply_saved_calibration(self, index):
+        factor = self.calibrationHistoryCombo.itemData(index)
+        if factor is not None:
+            self.calibrationFactorText.setText(f"{factor:.4f}")
+
+    def save_calibration(self, factor, method=""):
+        """Apply a new calibration factor and add it to this pump's saved calibrations (newest first)."""
+        factor = float(factor)
+        self.calibrationFactorText.setText(f"{factor:.4f}")
+
+        history = self._load_calibration_history()
+        entries = history.get(self._calibration_history_key(), [])
+        entries.insert(0, {
+            "factor": round(factor, 4),
+            "date": datetime.datetime.now().strftime("%d/%m/%Y %H:%M"),
+            "method": method,
+        })
+        history[self._calibration_history_key()] = entries[:CALIBRATION_HISTORY_LENGTH]
+        try:
+            with open(CALIBRATION_HISTORY_FILE, "w", encoding="utf-8") as file_handle:
+                json.dump(history, file_handle, indent=2)
+        except OSError as e:
+            print(f"Could not save calibration history: {e}")
+        self._refresh_calibration_history()
+        self.calibrationHistoryCombo.setCurrentIndex(1)
+
     def _get_requested_flowrate(self):
         try:
             flow_text = self.setFlowrateText.text().strip()
@@ -213,9 +282,7 @@ class PumpControl(QtWidgets.QWidget):
     def _get_command_flowrate(self):
         requested_flow = self._get_requested_flowrate()
         calibration_factor = self._get_calibration_factor()
-        if calibration_factor == 0:
-            return requested_flow
-        return requested_flow / calibration_factor
+        return requested_flow * calibration_factor
 
     def get_target_flowrate(self):
         return self._get_requested_flowrate()
@@ -286,12 +353,29 @@ class PumpControl(QtWidgets.QWidget):
         else:
             self.resetWidget()
 
+        # The calibration strategy selector goes wherever the calibrate button is, on its own row
+        self.calibrationMethodCombo.setHidden(self.pumpCalibrateButton.isHidden())
+        if not self.pumpCalibrateButton.isHidden():
+            self.pumpGroupBox.setMaximumHeight(self.pumpGroupBox.maximumHeight() + 30)
+
+        # Saved calibrations sit under the calibration factor they apply to
+        self.calibrationHistoryCombo.setHidden(self.calibrationFactorText.isHidden())
+        if not self.calibrationFactorText.isHidden():
+            self.pumpGroupBox.setMaximumHeight(self.pumpGroupBox.maximumHeight() + 25)
+
     def calibrate(self):
         try:
-            from droplet_calibration import DropletCounter
-            controller = self.parent()
-            driver = getattr(controller, "fractioncollector", None)
-            self.active_calibration = DropletCounter(widget=self, driver=driver)
+            if self.calibrationMethodCombo.currentText() == "Mass balance":
+                from mass_calibration import BalanceSettingsDialog, MassBalanceCalibration
+                dialog = BalanceSettingsDialog(self)
+                if dialog.exec() != QDialog.Accepted:
+                    return
+                self.active_calibration = MassBalanceCalibration(widget=self, **dialog.settings())
+            else:
+                from droplet_calibration import DropletCounter
+                controller = self.parent()
+                driver = getattr(controller, "fractioncollector", None)
+                self.active_calibration = DropletCounter(widget=self, driver=driver)
 
         except Exception as e:
             msgbox = QMessageBox(self)
@@ -322,6 +406,8 @@ class PumpControl(QtWidgets.QWidget):
         self.pumpStartButton_2.setHidden(True)
         self.pumpStopButton_2.setHidden(True)
         self.pumpCalibrateButton.setHidden(True)
+        self.calibrationMethodCombo.setHidden(True)
+        self.calibrationHistoryCombo.setHidden(True)
         self.setSyrSizeLabel_1.setHidden(True)
         self.setSyrCombo_1.setHidden(True)
         self.setSyrSizeLabel_2.setHidden(True)

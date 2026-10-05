@@ -156,7 +156,7 @@ class DropletCounter:
                     self.save_master_csv()
                     calibration_factor = self.calibration_factor()
 
-                    self.widget.calibrationFactorText.setText(f"{calibration_factor:.4f}")
+                    self.widget.save_calibration(calibration_factor, method="Droplet counter")
                     print("Pump Claibrated with factor: ", calibration_factor)
 
 
