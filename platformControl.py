@@ -6,6 +6,7 @@ import fraction_driver as fd
 import pandas as pd
 import time
 from sequence_manager import SequenceExecutor
+import sequence_io
 from fraction_collector_handler import FractionCollectorHandler
 from platform_config import PlatformConfigHandler
 import platform_monitor
@@ -93,6 +94,22 @@ class PlatformControl(QtWidgets.QWidget):
         self.sequenceTargetsBox.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.sequenceTargetsBoxLayout = QtWidgets.QVBoxLayout(self.sequenceTargetsBox)
 
+        # Core mode is direct flowrates; other modes add optional columns.
+        self.sequence_mode = sequence_io.MODE_FLOWRATE
+        self.sequenceModeLayout = QtWidgets.QHBoxLayout()
+        self.sequenceModeLabel = QtWidgets.QLabel("Sequence mode")
+        self.sequenceModeCombo = QtWidgets.QComboBox()
+        self.sequenceModeCombo.addItems(sequence_io.SEQUENCE_MODES)
+        self.sequenceModeCombo.setToolTip(
+            "Flowrates: set each pump in mL/min. "
+            "Residence time + ratio: total flow = reactor volume / residence time, split by pump ratio. "
+            "+ monomer %: also records each pump's % monomer (optional)."
+        )
+        self.sequenceModeLayout.addWidget(self.sequenceModeLabel)
+        self.sequenceModeLayout.addWidget(self.sequenceModeCombo)
+        self.sequenceModeLayout.addStretch(1)
+        self.sequenceTargetsBoxLayout.addLayout(self.sequenceModeLayout)
+
         self.targetsTable = QtWidgets.QTableWidget(0, 2)
         self.targetsTable.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.targetsTable.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
@@ -104,12 +121,16 @@ class PlatformControl(QtWidgets.QWidget):
         self.removeRowButton = QtWidgets.QPushButton("Remove row")
         self.moveUpRowButton = QtWidgets.QPushButton("Move up")
         self.moveDownRowButton = QtWidgets.QPushButton("Move down")
+        self.importSequenceButton = QtWidgets.QPushButton("Import design")
+        self.exportTemplateButton = QtWidgets.QPushButton("Export template")
         self.runSequenceButton = QtWidgets.QPushButton("Run Sequence")
         self.stopSequenceButton = QtWidgets.QPushButton("Stop Sequence")
         self.tableButtonsLayout.addWidget(self.addRowButton)
         self.tableButtonsLayout.addWidget(self.removeRowButton)
         self.tableButtonsLayout.addWidget(self.moveUpRowButton)
         self.tableButtonsLayout.addWidget(self.moveDownRowButton)
+        self.tableButtonsLayout.addWidget(self.importSequenceButton)
+        self.tableButtonsLayout.addWidget(self.exportTemplateButton)
         self.tableButtonsLayout.addWidget(self.runSequenceButton)
         self.tableButtonsLayout.addWidget(self.stopSequenceButton)
         self.tableButtonsLayout.addStretch(1)
@@ -119,6 +140,9 @@ class PlatformControl(QtWidgets.QWidget):
         self.removeRowButton.clicked.connect(self.remove_selected_rows)
         self.moveUpRowButton.clicked.connect(lambda: self.move_selected_row(-1))
         self.moveDownRowButton.clicked.connect(lambda: self.move_selected_row(1))
+        self.sequenceModeCombo.currentTextChanged.connect(self.set_sequence_mode)
+        self.importSequenceButton.clicked.connect(self.import_sequence_design)
+        self.exportTemplateButton.clicked.connect(self.export_sequence_template)
         self.runSequenceButton.clicked.connect(self.run_sequence)
         self.stopSequenceButton.clicked.connect(self.stop_sequence)
         self._sequence_row_states = {}
@@ -265,21 +289,15 @@ class PlatformControl(QtWidgets.QWidget):
         self.valve_count = 0
         self.refresh_target_columns()
 
-    def _get_table_headers(self):
-        headers = []
-
+    def _pump_names(self):
+        names = []
         for index, pump_widget in enumerate(self.pump_widgets, start=1):
-            pump_name = pump_widget.nameEdit.text().strip()
-            if not pump_name:
-                pump_name = f"Pump {index}"
-            headers.append(f"{pump_name} [mL/min]")
+            names.append(pump_widget.nameEdit.text().strip() or f"Pump {index}")
+        return names
 
-        if not headers:
-            headers.append("(pump) [mL/min]")
-
-        headers.append("Temperature [°C]")
-        headers.append("Fraction Collector Position")
-        return headers
+    def _get_table_headers(self):
+        pump_names = self._pump_names() or ["(pump)"]
+        return sequence_io.build_headers(pump_names, self.sequence_mode)
 
     def _get_monitor_start_time_str(self):
         """Return the start_time_str from the Platform Monitor when available.
@@ -408,6 +426,72 @@ class PlatformControl(QtWidgets.QWidget):
         selected_rows = sorted({index.row() for index in self.targetsTable.selectedIndexes()}, reverse=True)
         for row in selected_rows:
             self.targetsTable.removeRow(row)
+
+    def set_sequence_mode(self, mode):
+        # Columns shared between modes (e.g. temperature) keep their data; the rest are rebuilt.
+        self.sequence_mode = mode
+        self.refresh_target_columns()
+        self.upload_sequence()
+
+    def import_sequence_design(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Import sequence design", "", "Design files (*.csv *.xlsx *.xls);;All files (*)"
+        )
+        if not path:
+            return
+
+        try:
+            file_df = sequence_io.read_design_file(path)
+            design_df, warnings = sequence_io.match_design(file_df, self._get_table_headers())
+        except Exception as error:
+            QtWidgets.QMessageBox.warning(self, "Import failed", str(error))
+            return
+
+        append = False
+        if self.targetsTable.rowCount() > 0:
+            box = QtWidgets.QMessageBox(self)
+            box.setWindowTitle("Import design")
+            box.setText("The sequence already has rows.")
+            replace_button = box.addButton("Replace", QtWidgets.QMessageBox.AcceptRole)
+            append_button = box.addButton("Append", QtWidgets.QMessageBox.AcceptRole)
+            box.addButton(QtWidgets.QMessageBox.Cancel)
+            box.exec_()
+            clicked = box.clickedButton()
+            if clicked is append_button:
+                append = True
+            elif clicked is not replace_button:
+                return
+
+        self.targetsTable.blockSignals(True)
+        try:
+            if not append:
+                self.targetsTable.setRowCount(0)
+            start_row = self.targetsTable.rowCount()
+            self.targetsTable.setRowCount(start_row + len(design_df))
+            for row_offset, row_values in enumerate(design_df.itertuples(index=False)):
+                for col, value in enumerate(row_values):
+                    self.targetsTable.setItem(start_row + row_offset, col, QtWidgets.QTableWidgetItem(str(value)))
+        finally:
+            self.targetsTable.blockSignals(False)
+
+        self._reapply_sequence_row_styles()
+        self.upload_sequence()
+        print(f"[{time.strftime('%H:%M:%S')}] Imported {len(design_df)} design rows from {path}.")
+
+        if warnings:
+            QtWidgets.QMessageBox.warning(self, "Import warnings", "\n".join(warnings))
+
+    def export_sequence_template(self):
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Export sequence template", "sequence_template.csv", "CSV files (*.csv)"
+        )
+        if not path:
+            return
+        try:
+            sequence_io.template_df(self._pump_names() or ["(pump)"], self.sequence_mode).to_csv(path, index=False, encoding="utf-8-sig")
+            print(f"[{time.strftime('%H:%M:%S')}] Sequence template saved to {path}")
+        except Exception as error:
+            QtWidgets.QMessageBox.warning(self, "Export failed", str(error))
 
     def move_selected_row(self, direction):
         selected_rows = sorted({index.row() for index in self.targetsTable.selectedIndexes()})
@@ -730,25 +814,24 @@ class PlatformControl(QtWidgets.QWidget):
         return self.fraction_handler._finish_fractioncollector_collection(sample_id, total_flow_ml_min, on_complete)
 
     def _apply_row_flowrates(self, row_data):
+        # Flowrates come straight from the row, or from reactor volume / residence time split by ratio.
+        connected = {}
+        for index, pump_widget in enumerate(self.pump_widgets, start=1):
+            if hasattr(pump_widget, "pumpObj"):
+                name = pump_widget.nameEdit.text().strip() or f"Pump {index}"
+                connected[name] = pump_widget
+
+        if self.sequence_mode != sequence_io.MODE_FLOWRATE:
+            message = sequence_io.ratio_sum_warning(row_data, list(connected))
+            if message:
+                print(f"[{time.strftime('%H:%M:%S')}] Warning: {message}")
+
+        flows = sequence_io.pump_flowrates(row_data, list(connected), self.reactor_volume_ml, self.sequence_mode)
+
         total_flow_ml_min = 0.0
-        for pump_widget in self.pump_widgets:
-            if not hasattr(pump_widget, "pumpObj"):
-                continue
-
-            pump_name = pump_widget.nameEdit.text().strip()
-            if not pump_name:
-                continue
-
-            flow_column = f"{pump_name} [mL/min]"
-            if flow_column not in row_data:
-                continue
-
-            flow_value = row_data.get(flow_column)
-            if pd.isna(flow_value) or str(flow_value).strip() == "":
-                continue
-
+        for pump_name, flow_float in flows.items():
+            pump_widget = connected[pump_name]
             try:
-                flow_float = float(flow_value)
                 pump_widget.setFlowrateText.setText(str(flow_float))
                 pump_widget.setFlowrate()
                 pump_widget.start()
