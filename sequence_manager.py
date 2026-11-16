@@ -308,7 +308,23 @@ class SequenceExecutor:
         self.controller._sequence_row_index = 0
         self.controller._sequence_running = True
         self.controller._reset_sequence_row_styles()
+
+        # Each sequence gets its own experimental log CSV, with elapsed time and reactor volumes from zero.
+        monitor = getattr(getattr(self.controller, "main", None), "platform_monitor", None)
+        if monitor is not None:
+            try:
+                monitor.reset_run(new_log_file=True)
+            except Exception as error:
+                print(f"[{time.strftime('%H:%M:%S')}] Failed to reset platform monitor: {error}")
+
         self._run_current_row()
+
+        # Write a t=0 row immediately so the new log file exists from the start of the sequence.
+        if monitor is not None:
+            try:
+                monitor.continuous_log_function(event="SEQUENCE_START")
+            except Exception as error:
+                print(f"[{time.strftime('%H:%M:%S')}] Failed to log sequence start: {error}")
         print(f"[{time.strftime('%H:%M:%S')}] Sequence started.")
         return True
 

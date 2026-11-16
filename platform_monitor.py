@@ -211,6 +211,32 @@ class PlatformMonitor(QtWidgets.QWidget):
 
 
 
+    def reset_run(self, new_log_file=True):
+        """Start a fresh run: zero the elapsed-time origin and reactor-volume tally.
+
+        Called when a sequence starts. With new_log_file=True the log filename timestamp is
+        renewed too, so the next log row is written to a new Experimental_log CSV
+        (Sequence_log CSVs share this timestamp, so they match).
+        """
+        now = datetime.datetime.now()
+        self.start_time_int = now
+        if new_log_file:
+            self.start_time_str = now.strftime("%Y-%m-%d_%H-%M-%S")
+            self._log_dataframe = pd.DataFrame()
+
+        # Zero reactor-volume integration.
+        self._last_log_time = None
+        self._last_cumulative_flow = 0.0
+        self._volume_pumped_ml = 0.0
+
+        # Clear plot buffers so the time axis restarts at 0 with the new origin.
+        self._time_series = []
+        self._temp_series_value = []
+        self._pump_flow_series = {name: [] for name in self.pump_names}
+        self._pump_pressure_series = {name: [] for name in self.pump_names}
+        self._flow_cumulative_value = []
+        print(f"[Platform Monitor] Run reset. Log file timestamp: {self.start_time_str}")
+
     def update_logging_interval(self, value):
         """Update timer interval from UI value in seconds."""
         self.logging_interval = value * 1000
