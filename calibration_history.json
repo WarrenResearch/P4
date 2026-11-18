@@ -1,0 +1,48 @@
+{
+  "Pump 1": [
+    {
+      "factor": 1.003,
+      "date": "08/10/2026 17:50",
+      "method": "Mass balance"
+    },
+    {
+      "factor": 1.0217,
+      "date": "05/10/2026 17:16",
+      "method": "Mass balance"
+    }
+  ],
+  "Pump 2": [
+    {
+      "factor": 1.0737,
+      "date": "05/10/2026 19:32",
+      "method": "Mass balance"
+    }
+  ],
+  "Pump 3": [
+    {
+      "factor": 0.9894,
+      "date": "06/10/2026 15:26",
+      "method": "Mass balance"
+    },
+    {
+      "factor": 0.9878,
+      "date": "06/10/2026 14:33",
+      "method": "Mass balance"
+    },
+    {
+      "factor": 0.9867,
+      "date": "06/10/2026 13:57",
+      "method": "Mass balance"
+    },
+    {
+      "factor": 7.96,
+      "date": "06/10/2026 11:21",
+      "method": "Mass balance"
+    },
+    {
+      "factor": 1.0287,
+      "date": "06/10/2026 10:39",
+      "method": "Mass balance"
+    }
+  ]
+}

@@ -247,7 +247,14 @@ class GPC_runner(QtWidgets.QWidget):
             QMessageBox.warning(self, "Warning", "TC08 is not connected.")
             return
         
-        self.GPC = GPC_handler.GPC_handler(self, main=self.main, PicoGPC=self.PicoGPC)
+        try:
+            self.GPC = GPC_handler.GPC_handler(
+                self, main=self.main, PicoGPC=self.PicoGPC
+            )
+        except RuntimeError as error:
+            QMessageBox.warning(self, "Warning", str(error))
+            return
+
         self.GPC.GPC_complete.connect(self.GPC_complete_callback)
         # print("Signal connected:", self.GPC.GPC_complete.isSignalConnected(self.GPC_complete_callback))   
         if self.single_inj.isChecked():

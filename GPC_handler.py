@@ -23,8 +23,32 @@ class GPC_handler(QObject):
         self.event = threading.Event()
         self.RealTime = [datetime.now()] * 3
         self.PicoGPC = PicoGPC
-        self.GPCValve = self.main.controller.valve5
+        self.GPCValve = self._get_gpc_valve()
         self.PicoGPC.dataReady.connect(self.import_data)
+
+    def _get_gpc_valve(self):
+        """Return the configured valve used to inject GPC samples."""
+        controller = self.main.controller
+
+        # Keep compatibility with the original fixed five-valve layout, where
+        # the outlet/sample valve was always valve5.
+        gpc_valve = getattr(controller, "valve5", None)
+        if gpc_valve is not None:
+            return gpc_valve
+
+        valves = getattr(controller, "valve_widgets", [])
+        for valve in valves:
+            name = valve.nameEdit.text().strip().lower()
+            if name in {"outlet", "sample", "gpc"}:
+                return valve
+
+        if len(valves) == 1:
+            return valves[0]
+
+        raise RuntimeError(
+            "No GPC sample valve is configured. Add an Outlet valve "
+            "(or configure five valves so the outlet is valve5)."
+        )
 
     # Start a thread for GPC - either for analysis (default) or for a calibration
     def GPC_start(self, type='default', injnum=1, sampleID=None):
@@ -302,4 +326,3 @@ class GPC_handler(QObject):
         Results["chrom"] = chrom
 
         return Results
-

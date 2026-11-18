@@ -301,7 +301,14 @@ class GPC_calibration(QtWidgets.QWidget):
             return
 
         
-        self.GPC = GPC_handler.GPC_handler(self, main=self.main, PicoGPC=self.PicoGPC)
+        try:
+            self.GPC = GPC_handler.GPC_handler(
+                self, main=self.main, PicoGPC=self.PicoGPC
+            )
+        except RuntimeError as error:
+            QMessageBox.warning(self, "Warning", str(error))
+            return
+
         self.GPC.GPC_complete.connect(self.GPC_complete_callback)
         # print("Signal connected:", self.GPC.GPC_complete.isSignalConnected(self.GPC_complete_callback))   
         self.GPC.GPC_start(type='calibrant')
@@ -418,4 +425,3 @@ class GPC_calibration(QtWidgets.QWidget):
             data = [f"{RT:.4f}", f"{log_mw:.4f}", f"{mw:.4f}", f"{RT:.4f}", "", ""]
             for col, val in enumerate(data):
                 self.GPCcalibtable.setItem(new_row, col, QTableWidgetItem(val))
-
