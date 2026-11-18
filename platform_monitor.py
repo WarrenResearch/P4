@@ -53,6 +53,11 @@ class PlatformMonitor(QtWidgets.QWidget):
         self._pump_pressure_series = {}  # Pressure data per pump (initialized after pump config).
         self._flow_cumulative_value = []
         self._log_dataframe = pd.DataFrame()  # In-memory table mirrored to CSV on each cycle.
+
+        # Reactor-volume tracking for logs: total volume pumped since the monitor started.
+        self._last_log_time = None # datetime of previous log row.
+        self._last_cumulative_flow = 0.0 # total flow [mL/min] in effect since previous log row.
+        self._volume_pumped_ml = 0.0 # integrated total volume pumped [mL].
         self._build_graphs()
 
         
@@ -205,6 +210,32 @@ class PlatformMonitor(QtWidgets.QWidget):
         return float('nan')
 
 
+
+    def reset_run(self, new_log_file=True):
+        """Start a fresh run: zero the elapsed-time origin and reactor-volume tally.
+
+        Called when a sequence starts. With new_log_file=True the log filename timestamp is
+        renewed too, so the next log row is written to a new Experimental_log CSV
+        (Sequence_log CSVs share this timestamp, so they match).
+        """
+        now = datetime.datetime.now()
+        self.start_time_int = now
+        if new_log_file:
+            self.start_time_str = now.strftime("%Y-%m-%d_%H-%M-%S")
+            self._log_dataframe = pd.DataFrame()
+
+        # Zero reactor-volume integration.
+        self._last_log_time = None
+        self._last_cumulative_flow = 0.0
+        self._volume_pumped_ml = 0.0
+
+        # Clear plot buffers so the time axis restarts at 0 with the new origin.
+        self._time_series = []
+        self._temp_series_value = []
+        self._pump_flow_series = {name: [] for name in self.pump_names}
+        self._pump_pressure_series = {name: [] for name in self.pump_names}
+        self._flow_cumulative_value = []
+        print(f"[Platform Monitor] Run reset. Log file timestamp: {self.start_time_str}")
 
     def update_logging_interval(self, value):
         """Update timer interval from UI value in seconds."""
@@ -372,12 +403,39 @@ class PlatformMonitor(QtWidgets.QWidget):
             if not math.isnan(corrected):
                 cumulative_flow += corrected
 
+        # Integrate volume pumped since the last log row. The previous row's flow is used because
+        # it was the flow in effect over the interval (a setpoint change only applies from now on).
+        if self._last_log_time is not None:
+            dt_min = (now - self._last_log_time).total_seconds() / 60.0
+            self._volume_pumped_ml += self._last_cumulative_flow * dt_min
+        self._last_log_time = now
+        self._last_cumulative_flow = cumulative_flow
+
+        # Reactor volumes = volume pumped / reactor volume (set in Platform Control).
+        reactor_volume_ml = getattr(getattr(self.main, "controller", None), "reactor_volume_ml", None)
+        try:
+            reactor_volumes = self._volume_pumped_ml / float(reactor_volume_ml)
+        except (TypeError, ValueError, ZeroDivisionError):
+            reactor_volumes = float('NaN')
+
+        # Sample marker: 1 on the row written when a sample is taken, with its id for easy plotting.
+        sample_taken = 0
+        sample_id = None
+        if event and str(event).startswith("SAMPLE_TAKEN"):
+            sample_taken = 1
+            for part in str(event).split(";"):
+                if part.startswith("id="):
+                    sample_id = part[len("id="):]
+
         # Build one-row dataframe entry with dynamic pump columns.
         row_data = {
             "Time": timestamp,
             "Elapsed Time": round(elapsed_time, 2),
             "Temperature": temp,
             "Cumulative Flow": cumulative_flow,
+            "Reactor Volumes": round(reactor_volumes, 4) if not math.isnan(reactor_volumes) else reactor_volumes,
+            "Sample Taken": sample_taken,
+            "Sample ID": sample_id,
             "Event": event,
             "residence_time": None
         }
