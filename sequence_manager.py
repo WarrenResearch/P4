@@ -121,9 +121,12 @@ class SequenceExecutor:
         self._schedule_sampling_point(current_row, 0)
 
     def _schedule_sampling_point(self, current_row, point_index):
-        # Hold volume is the chosen number of reactor volumes plus downstream delay volume.
+        # Hold volume is the chosen number of reactor volumes plus the downstream delay volume.
+        # The delay is that of the farthest sampling point in use (fraction collector, switching
+        # valve, or the larger of the two for "Both"), so sampling starts once the polymer has
+        # reached the last of the points.
         reactor_volumes = self._row_sampling_volumes[point_index]
-        hold_volume_ml = (reactor_volumes * float(self.controller.reactor_volume_ml)) + self.controller.fraction_delay_volume_ml
+        hold_volume_ml = (reactor_volumes * float(self.controller.reactor_volume_ml)) + self.controller.sampling_delay_volume_ml()
         sample_time_s = self._row_hold_start_s + (hold_volume_ml / self._row_hold_flow_ml_min) * 60.0
         wait_s = max(0.0, sample_time_s - time.time())
 
@@ -151,6 +154,24 @@ class SequenceExecutor:
         self._sample_current_row(current_row, 1)
 
     def _finish_sampling_point(self, current_row, point_index=None):
+        # The fraction collector plan (if used) is finished. Now run the switching valve,
+        # which goes last because its injection introduces solvent into the stream.
+        if not self.controller.uses_switching_valve():
+            self._advance_after_sampling_point(current_row, point_index)
+            return
+
+        volume_tag = f"-{self._row_sampling_volumes[point_index]:g}RV" if point_index is not None else ""
+        sample_id = f"Valve-row-{current_row + 1}{volume_tag}"
+        started = self.controller.switching_valve_sample(
+            sample_id,
+            on_complete=lambda row=current_row, point=point_index: self._advance_after_sampling_point(row, point),
+            track_sequence_timer=True,
+            reactor_volumes=self._row_sampling_volumes[point_index] if point_index is not None else None,
+        )
+        if not started:
+            self._advance_after_sampling_point(current_row, point_index)
+
+    def _advance_after_sampling_point(self, current_row, point_index=None):
         # Move to the next reactor volume sampling point for this row, or advance to the next row.
         if point_index is not None and point_index + 1 < len(self._row_sampling_volumes):
             self._schedule_sampling_point(current_row, point_index + 1)
@@ -159,6 +180,11 @@ class SequenceExecutor:
         self._advance_sequence_after_sample(current_row)
 
     def _sample_current_row(self, current_row, sample_number=1, sample_index=0, sample_plan=None, point_index=None):
+        # Switching-valve-only: skip the fraction collector and go straight to the valve.
+        if not self.controller.uses_fraction_collector():
+            self._finish_sampling_point(current_row, point_index)
+            return
+
         if sample_plan is None:
             sample_plan = self.controller.get_sample_plan()
 

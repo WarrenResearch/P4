@@ -51,10 +51,12 @@ class GPC_handler(QObject):
         )
 
     # Start a thread for GPC - either for analysis (default) or for a calibration
-    def GPC_start(self, type='default', injnum=1, sampleID=None):
+    def GPC_start(self, type='default', injnum=1, sampleID=None, inj_interval_s=175, conditions=None):
         print("GPC start")
         if type == 'default':
             self.injnum = injnum
+            self.inj_interval_s = inj_interval_s
+            self.conditions = conditions or {}
             self.sampleID = sampleID
             GPC_Thread = threading.Thread(target=self.GPC_run)
             GPC_Thread.start()
@@ -78,7 +80,7 @@ class GPC_handler(QObject):
         print("GPC triggered!")
         if self.injnum==3:
             self.iter = 0
-            self.GPCscheduler.add_job(self.GPC_inject, trigger='interval', seconds=175, id='GPC_inject')
+            self.GPCscheduler.add_job(self.GPC_inject, trigger='interval', seconds=getattr(self, 'inj_interval_s', 175), id='GPC_inject')
             self.GPCscheduler.start()
         self.GPC_inject()
         self.event.wait()
@@ -170,19 +172,25 @@ class GPC_handler(QObject):
                 "Averages":[],
                 "injnum": self.injnum,
                 "sampleID": self.sampleID,
+                "conditions": getattr(self, "conditions", {}),
                 }
 
-        # Load calibration polynomial
-        with open(r'C:\Users\Pcubed\miniconda3\envs\P3\Calibration.pkl', 'rb') as f:
-            poly = pickle.load(f)
+        # Load calibration polynomial. Without one (none exists yet) we still baseline-correct
+        # and keep the chromatograms; Mn/Mw/PD/MP are left as NaN.
+        try:
+            with open(r'C:\Users\Pcubed\miniconda3\envs\P3\Calibration.pkl', 'rb') as f:
+                poly = pickle.load(f)
+        except (FileNotFoundError, OSError):
+            poly = None
+            print("No GPC calibration found: saving baseline-corrected chromatograms only.")
 
-        #Convert GPC results to arrays
+        #Convert GPC results to arrays (explicit copies so the raw data is not modified by the baseline subtraction)
         if "RI" in GPCresults.columns:
-            elution_time = GPCresults["Time"].to_numpy()
-            RI_signal = GPCresults["RI"].to_numpy()
-            uv_signal = GPCresults["UV"].to_numpy() if "UV" in GPCresults.columns else None # Check if UV data exists, and if so, convert to array, otherwise set to None
+            elution_time = GPCresults["Time"].to_numpy(copy=True)
+            RI_signal = GPCresults["RI"].to_numpy(copy=True)
+            uv_signal = GPCresults["UV"].to_numpy(copy=True) if "UV" in GPCresults.columns else None # Check if UV data exists, and if so, convert to array, otherwise set to None
         else:
-            elution_time, RI_signal = GPCresults.to_numpy().T
+            elution_time, RI_signal = GPCresults.to_numpy(copy=True).T
             uv_signal = None
         #Add start time manipulation (see MATLAB)
         #Points on baseline (ADJUST after calibration)
@@ -198,6 +206,7 @@ class GPC_handler(QObject):
         baseline = np.polyfit(elution_time[fitpoints], RI_signal[fitpoints], 1)
         # Subtract baseline
         RI_signal -= np.polyval(baseline, elution_time)
+        Results["RI_corrected"] = RI_signal.copy()
 
         indices = []
         for rt in StartTime:
@@ -218,6 +227,14 @@ class GPC_handler(QObject):
             RI_signal_ana = RI_signal[start_idx:end_idx]
             # Make elution_time_ana start at 0
             elution_time_ana = elution_time_ana - elution_time_ana[0]
+
+            if poly is None:
+                # No calibration: keep the baseline-corrected chromatogram only.
+                n_points = min(len(elution_time_ana), chromlength)
+                chrom[:n_points, 2*i] = elution_time_ana[:n_points]
+                chrom[:n_points, 2*i+1] = RI_signal_ana[:n_points]
+                Results["Mn"][i] = Results["Mw"][i] = Results["PD"][i] = Results["MP"][i] = np.nan
+                continue
 
             # Filter for data between min and max calibrant elution
             peakfilter = ((elution_time_ana > 122) & (elution_time_ana < 201))

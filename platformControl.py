@@ -8,6 +8,7 @@ import time
 from sequence_manager import SequenceExecutor
 import sequence_io
 from fraction_collector_handler import FractionCollectorHandler
+from switching_valve_handler import SwitchingValveHandler
 from platform_config import PlatformConfigHandler
 import platform_monitor
 import datetime
@@ -19,6 +20,12 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractioncollector = fd.AzuraFC61()
 
         self.fraction_delay_volume_ml = 0.556
+
+        # Sampling method options: "Fraction collector", "Switching valve" or "Both".
+        self.sample_method = "Fraction collector"
+        self.valve_injection = "Single"       # "Single" or "Triple" (switching valve only)
+        self.valve_delay_volume_ml = 1.0      # reactor outlet -> switching valve
+        self.injection_wait_s = 175.0         # gap between triple injections (GPC standard)
 
         self.main = main
         # start_time_str can be sourced from Platform Monitor when available
@@ -150,7 +157,7 @@ class PlatformControl(QtWidgets.QWidget):
         self.sequence_targets_df = self.get_sequence_targets_df()
         self.targetsTable.itemChanged.connect(self._on_targets_table_changed)
         self.fractioncollectorBox = QtWidgets.QGroupBox("Fraction Collector")
-        self.fractioncollectorBox.setMaximumHeight(400)
+        self.fractioncollectorBox.setMaximumHeight(620)
         self.fractioncollectorBox.setMaximumWidth(300)
         self.fractioncollectorBoxLayout = QtWidgets.QVBoxLayout(self.fractioncollectorBox)
         self.fractioncollector = fd.AzuraFC61()
@@ -170,8 +177,27 @@ class PlatformControl(QtWidgets.QWidget):
         self.reactorVolumeText = QtWidgets.QLineEdit("2")
 
         self.fraction_delay_volume_ml = 0.556
-        self.fractionDelayVolumeLabel = QtWidgets.QLabel("Delay Volume (ml)")
+        self.fractionDelayVolumeLabel = QtWidgets.QLabel("Reactor -> fraction collector volume (ml)")
         self.fractionDelayVolumeText = QtWidgets.QLineEdit("0.556")
+
+        self.sampleMethodLabel = QtWidgets.QLabel("Sample method")
+        self.sampleMethodCombo = QtWidgets.QComboBox()
+        self.sampleMethodCombo.addItems(["Fraction collector", "Switching valve", "Both"])
+        self.sampleMethodCombo.setToolTip(
+            "Both: the fraction collector samples first, then the switching valve injects "
+            "(valve injection introduces solvent into the stream)."
+        )
+
+        self.valveInjectionLabel = QtWidgets.QLabel("Valve injection")
+        self.valveInjectionCombo = QtWidgets.QComboBox()
+        self.valveInjectionCombo.addItems(["Single", "Triple"])
+
+        self.valveDelayVolumeLabel = QtWidgets.QLabel("Reactor -> switching valve volume (ml)")
+        self.valveDelayVolumeText = QtWidgets.QLineEdit("1.0")
+
+        self.injectionWaitLabel = QtWidgets.QLabel("Triple injection wait (s)")
+        self.injectionWaitText = QtWidgets.QLineEdit("175")
+        self.injectionWaitText.setToolTip("Time between triple injections. Keep long enough that GPC samples do not overlap.")
 
         # Reactor volumes (after the wash step) at which the sample plan is run, e.g. "3, 3.5, 4".
         self.sampling_reactor_volumes = [3.0]
@@ -217,6 +243,14 @@ class PlatformControl(QtWidgets.QWidget):
         self.fractioncollectorBoxLayout.addWidget(self.reactorVolumeText)
         self.fractioncollectorBoxLayout.addWidget(self.fractionDelayVolumeLabel)
         self.fractioncollectorBoxLayout.addWidget(self.fractionDelayVolumeText)
+        self.fractioncollectorBoxLayout.addWidget(self.valveDelayVolumeLabel)
+        self.fractioncollectorBoxLayout.addWidget(self.valveDelayVolumeText)
+        self.fractioncollectorBoxLayout.addWidget(self.sampleMethodLabel)
+        self.fractioncollectorBoxLayout.addWidget(self.sampleMethodCombo)
+        self.fractioncollectorBoxLayout.addWidget(self.valveInjectionLabel)
+        self.fractioncollectorBoxLayout.addWidget(self.valveInjectionCombo)
+        self.fractioncollectorBoxLayout.addWidget(self.injectionWaitLabel)
+        self.fractioncollectorBoxLayout.addWidget(self.injectionWaitText)
         self.fractioncollectorBoxLayout.addWidget(self.samplingReactorVolumesLabel)
         self.fractioncollectorBoxLayout.addWidget(self.samplingReactorVolumesText)
         self.fractioncollectorBoxLayout.addWidget(self.fractionCleanButton)
@@ -235,6 +269,11 @@ class PlatformControl(QtWidgets.QWidget):
         self.reactorVolumeText.editingFinished.connect(self.update_reactor_volume)
         self.fractionDelayVolumeText.editingFinished.connect(self.update_fraction_delay_volume)
         self.samplingReactorVolumesText.editingFinished.connect(self.update_sampling_reactor_volumes)
+        self.valveDelayVolumeText.editingFinished.connect(self.update_valve_delay_volume)
+        self.injectionWaitText.editingFinished.connect(self.update_injection_wait)
+        self.sampleMethodCombo.currentTextChanged.connect(self.update_sample_method)
+        self.valveInjectionCombo.currentTextChanged.connect(self.update_valve_injection)
+        self.update_sample_method(self.sampleMethodCombo.currentText())
         self.fractionCleanButton.clicked.connect(self.clean_dead_volume)
         self.fractionSampleButton.clicked.connect(self.run_sample_plan)
 
@@ -248,6 +287,7 @@ class PlatformControl(QtWidgets.QWidget):
         self._sequence_timers = []
         self.sequence_executor = SequenceExecutor(self)
         self.fraction_handler = FractionCollectorHandler(self)
+        self.valve_handler = SwitchingValveHandler(self)
         self.config_handler = PlatformConfigHandler(self)
 
 
@@ -724,6 +764,63 @@ class PlatformControl(QtWidgets.QWidget):
         self.fraction_delay_volume_ml = value
         return True
 
+    def uses_fraction_collector(self):
+        return self.sample_method in ("Fraction collector", "Both")
+
+    def uses_switching_valve(self):
+        return self.sample_method in ("Switching valve", "Both")
+
+    def sampling_delay_volume_ml(self):
+        # Volume from the reactor outlet to the farthest sampling point in use.
+        # For "Both" this is the larger of the two, so sampling only starts once the
+        # polymer has reached the last of the two points.
+        delays = []
+        if self.uses_fraction_collector():
+            delays.append(self.fraction_delay_volume_ml)
+        if self.uses_switching_valve():
+            delays.append(self.valve_delay_volume_ml)
+        return max(delays) if delays else 0.0
+
+    def update_sample_method(self, text=None):
+        self.sample_method = text if text in ("Fraction collector", "Switching valve", "Both") else self.sampleMethodCombo.currentText()
+        valve_on = self.uses_switching_valve()
+        for widget in (self.valveInjectionLabel, self.valveInjectionCombo, self.valveDelayVolumeLabel,
+                       self.valveDelayVolumeText, self.injectionWaitLabel, self.injectionWaitText):
+            widget.setEnabled(valve_on)
+        self.injectionWaitText.setEnabled(valve_on and self.valve_injection == "Triple")
+        self.injectionWaitLabel.setEnabled(self.injectionWaitText.isEnabled())
+        fc_on = self.uses_fraction_collector()
+        self.fractionDelayVolumeLabel.setEnabled(fc_on)
+        self.fractionDelayVolumeText.setEnabled(fc_on)
+
+    def update_valve_injection(self, text=None):
+        self.valve_injection = text if text in ("Single", "Triple") else self.valveInjectionCombo.currentText()
+        self.update_sample_method(self.sample_method)
+
+    def update_valve_delay_volume(self):
+        try:
+            value = float(self.valveDelayVolumeText.text().strip())
+            if value < 0:
+                raise ValueError
+        except ValueError:
+            QtWidgets.QMessageBox.warning(self, "Valve volume", "Enter a non-negative number of milliliters.")
+            self.valveDelayVolumeText.setText(str(self.valve_delay_volume_ml))
+            return False
+        self.valve_delay_volume_ml = value
+        return True
+
+    def update_injection_wait(self):
+        try:
+            value = float(self.injectionWaitText.text().strip())
+            if value <= 0:
+                raise ValueError
+        except ValueError:
+            QtWidgets.QMessageBox.warning(self, "Injection wait", "Enter a positive number of seconds.")
+            self.injectionWaitText.setText(f"{self.injection_wait_s:g}")
+            return False
+        self.injection_wait_s = value
+        return True
+
     @staticmethod
     def parse_sampling_reactor_volumes(value):
         # Accept "3, 3.5, 4" or a list; returns a sorted, de-duplicated list of positive floats.
@@ -806,6 +903,9 @@ class PlatformControl(QtWidgets.QWidget):
 
     def run_sample_plan(self):
         return self.fraction_handler.run_sample_plan()
+
+    def switching_valve_sample(self, sample_id, on_complete=None, track_sequence_timer=False, reactor_volumes=None):
+        return self.valve_handler.switching_valve_sample(sample_id, on_complete, track_sequence_timer, reactor_volumes)
 
     def _start_fractioncollector_collection(self, sample_id, total_flow_ml_min, on_complete=None, track_sequence_timer=False):
         return self.fraction_handler._start_fractioncollector_collection(sample_id, total_flow_ml_min, on_complete, track_sequence_timer)

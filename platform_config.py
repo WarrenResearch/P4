@@ -52,6 +52,10 @@ class PlatformConfigHandler:
             "thermocontroller": thermocontroller,
             "reactor_volume_ml": self.controller.reactor_volume_ml,
             "fraction_delay_volume_ml": self.controller.fraction_delay_volume_ml,
+            "sample_method": self.controller.sample_method,
+            "valve_injection": self.controller.valve_injection,
+            "valve_delay_volume_ml": self.controller.valve_delay_volume_ml,
+            "injection_wait_s": self.controller.injection_wait_s,
             "sampling_reactor_volumes": list(getattr(self.controller, "sampling_reactor_volumes", [3.0])),
             "sample_definitions": list(getattr(self.controller, "sample_definitions", [])),
             "sample_name": getattr(self.controller, "sample_name", ""),
@@ -139,6 +143,27 @@ class PlatformConfigHandler:
 
         self.controller.fraction_delay_volume_ml = fraction_delay_volume
         self.controller.fractionDelayVolumeText.setText(str(fraction_delay_volume))
+
+        # Restore sampling method options; older config files without them keep the current values.
+        method = data.get("sample_method", self.controller.sample_method)
+        if method in ("Fraction collector", "Switching valve", "Both"):
+            self.controller.sampleMethodCombo.setCurrentText(method)
+        injection = data.get("valve_injection", self.controller.valve_injection)
+        if injection in ("Single", "Triple"):
+            self.controller.valveInjectionCombo.setCurrentText(injection)
+        for key, attr, text_widget, minimum_exclusive in (
+            ("valve_delay_volume_ml", "valve_delay_volume_ml", self.controller.valveDelayVolumeText, False),
+            ("injection_wait_s", "injection_wait_s", self.controller.injectionWaitText, True),
+        ):
+            try:
+                value = float(data.get(key, getattr(self.controller, attr)))
+                if value < 0 or (minimum_exclusive and value == 0):
+                    raise ValueError
+            except (TypeError, ValueError):
+                value = getattr(self.controller, attr)
+            setattr(self.controller, attr, value)
+            text_widget.setText(f"{value:g}")
+        self.controller.update_sample_method(self.controller.sample_method)
 
         # Restore sampling reactor volumes, but fall back to the current value if saved data is invalid.
         sampling_volumes = data.get("sampling_reactor_volumes", self.controller.sampling_reactor_volumes)

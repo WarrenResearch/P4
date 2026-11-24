@@ -21,6 +21,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 # Import classes/functions from files
 import GPC_handler
+import gpc_results_store
 
 
 
@@ -243,24 +244,29 @@ class GPC_runner(QtWidgets.QWidget):
             self.uv_curve.setData(x, uv)
 
     def inject_sample_callback(self):
+        if self.single_inj.isChecked():
+            self.start_injection(1, self.sampleID_input.text())
+        elif self.triple_inj.isChecked():
+            self.start_injection(3, self.sampleID_input.text())
+
+    def start_injection(self, injnum, sampleID, inj_interval_s=175, conditions=None):
+        # Shared by the Inject button and the platform sampling sequence.
         if self.TC08connected == False:
             QMessageBox.warning(self, "Warning", "TC08 is not connected.")
-            return
-        
+            return False
+
         try:
             self.GPC = GPC_handler.GPC_handler(
                 self, main=self.main, PicoGPC=self.PicoGPC
             )
         except RuntimeError as error:
             QMessageBox.warning(self, "Warning", str(error))
-            return
+            return False
 
         self.GPC.GPC_complete.connect(self.GPC_complete_callback)
-        # print("Signal connected:", self.GPC.GPC_complete.isSignalConnected(self.GPC_complete_callback))   
-        if self.single_inj.isChecked():
-            self.GPC.GPC_start(type='default', injnum=1, sampleID=self.sampleID_input.text())
-        elif self.triple_inj.isChecked():
-            self.GPC.GPC_start(type='default', injnum=3, sampleID=self.sampleID_input.text())
+        # print("Signal connected:", self.GPC.GPC_complete.isSignalConnected(self.GPC_complete_callback))
+        self.GPC.GPC_start(type='default', injnum=injnum, sampleID=sampleID, inj_interval_s=inj_interval_s, conditions=conditions)
+        return True
                 # sampleValve = self.main.controller.valve5
         # sampleValve.writedelaytime("10")
         # sampleValve.ValveSample()
@@ -269,6 +275,15 @@ class GPC_runner(QtWidgets.QWidget):
     def GPC_complete_callback(self, GPCResults):
             
             self.GPCResults = GPCResults
+            # Save straight away so an unattended run does not lose data.
+            try:
+                run_tag = None
+                controller = getattr(self.main, "controller", None)
+                if controller is not None:
+                    run_tag = controller._get_monitor_start_time_str()
+                gpc_results_store.save_result(GPCResults, run_tag)
+            except Exception as error:
+                print(f"Failed to save GPC result: {error}")
             injnum = self.GPCResults["injnum"]
             chromatograms = GPCResults["chrom"]
             polpeak = GPCResults["polpeak"]
@@ -278,7 +293,8 @@ class GPC_runner(QtWidgets.QWidget):
 
             for i in range(injnum):
                 # Plotting chromatograms and polpeak data
-                if not self.GPCResults["Averages"]["MP"].values[0] == 0:
+                mp_value = self.GPCResults["Averages"]["MP"].values[0]
+                if pd.notna(mp_value) and mp_value != 0:
                     polpeak_temp = polpeak.iloc[:, 2*i:2*i+2]
                     polpeak_temp.columns=['MW', 'Intensity']
                     self.MW_slice_plot.plot(polpeak_temp['MW'], polpeak_temp['Intensity'])
