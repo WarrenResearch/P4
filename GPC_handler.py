@@ -216,6 +216,8 @@ class GPC_handler(QObject):
             closest_index = np.argmin(time_diffs)
             indices.append(closest_index)
 
+        Results["injection_times"] = [rt.strftime("%Y-%m-%d %H:%M:%S") for rt in StartTime[:injnum]]
+
         for i in range(injnum):
             start_idx = indices[i]
             end_idx = start_idx + chromlength

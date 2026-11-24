@@ -42,7 +42,7 @@ def save_result(results, run_tag=None):
     """Save one finished GPC result and append it to the run's summary CSV.
 
     Writes (all in GPC_results/<run>/):
-      <sample_id>_<time>.csv  full trace: Time, RI_raw, RI_corrected (baseline subtracted), UV
+      <sample_id>_<time>.csv  full trace: Time, RI_raw (ch1), RI_corrected (baseline subtracted), UV (ch2)
       <sample_id>_<time>.pkl  full result dict (loadable with "Load GPC data")
       GPC_summary.csv         one row per sample with its conditions
     Mn/Mw/PD/MP are blank until a calibration curve exists.
@@ -55,6 +55,9 @@ def save_result(results, run_tag=None):
     stamp = start.strftime("%Y%m%d-%H%M%S")
     base = f"{_safe(sample_id)}_{stamp}"
 
+    # One CSV per sample (a triple injection stays in one file, as the baseline is fitted
+    # through the whole trace): Time (s since measurement start), RI_raw (ch1),
+    # RI_corrected (baseline subtracted), UV (ch2).
     trace = results["rawchrom"].copy()
     if "RI_corrected" in results:
         trace.insert(trace.columns.get_loc("RI") + 1 if "RI" in trace.columns else len(trace.columns),
@@ -77,7 +80,7 @@ def save_result(results, run_tag=None):
 
     row = {
         "sample_id": sample_id,
-        "injection_start": start.strftime("%Y-%m-%d %H:%M:%S"),
+        "injection_start": "; ".join(results.get("injection_times") or [start.strftime("%Y-%m-%d %H:%M:%S")]),
         "injections": results.get("injnum", ""),
         "row": conditions.get("row", ""),
         "reactor_volumes": conditions.get("reactor_volumes", ""),
