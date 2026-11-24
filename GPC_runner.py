@@ -228,8 +228,8 @@ class GPC_runner(QtWidgets.QWidget):
         else:
             x, ri = data
             uv = None
-        # set X range to show last 800 seconds of data, with slicing
-        max_points = 800 * 5 # 5 points per second
+        # Show the last 1600 seconds of data (covers a full 1500 s single-injection run), with slicing
+        max_points = 1600 * 5 # 5 points per second
         if len(x) > max_points:
             x = x[-max_points:]
             ri = ri[-max_points:]

@@ -178,6 +178,10 @@ class PlatformControl(QtWidgets.QWidget):
 
         self.fraction_delay_volume_ml = 0.556
         self.fractionDelayVolumeLabel = QtWidgets.QLabel("Reactor -> fraction collector volume (ml)")
+        self.fractionDelayVolumeLabel.setToolTip(
+            "With the switching valve also selected, the collector samples after the extra volume "
+            "(this minus the reactor -> valve volume) has flowed past the valve injection."
+        )
         self.fractionDelayVolumeText = QtWidgets.QLineEdit("0.556")
 
         self.sampleMethodLabel = QtWidgets.QLabel("Sample method")
@@ -771,15 +775,22 @@ class PlatformControl(QtWidgets.QWidget):
         return self.sample_method in ("Switching valve", "Both")
 
     def sampling_delay_volume_ml(self):
-        # Volume from the reactor outlet to the farthest sampling point in use.
-        # For "Both" this is the larger of the two, so sampling only starts once the
-        # polymer has reached the last of the two points.
-        delays = []
-        if self.uses_fraction_collector():
-            delays.append(self.fraction_delay_volume_ml)
+        # Volume from the reactor outlet to the first sampling point used. The switching valve
+        # goes first, so when it is used the point is timed to the polymer reaching the valve;
+        # the fraction collector then follows after valve_to_fraction_hold_ml() has flowed.
         if self.uses_switching_valve():
-            delays.append(self.valve_delay_volume_ml)
-        return max(delays) if delays else 0.0
+            return self.valve_delay_volume_ml
+        if self.uses_fraction_collector():
+            return self.fraction_delay_volume_ml
+        return 0.0
+
+    def valve_to_fraction_hold_ml(self):
+        # Extra dead volume between the switching valve and the fraction collector. Only applies
+        # when both are used: the collector waits this long after the valve fires, so the
+        # THF injected from the sample loop has passed before the collector samples.
+        if self.uses_switching_valve() and self.uses_fraction_collector():
+            return max(0.0, self.fraction_delay_volume_ml - self.valve_delay_volume_ml)
+        return 0.0
 
     def update_sample_method(self, text=None):
         self.sample_method = text if text in ("Fraction collector", "Switching valve", "Both") else self.sampleMethodCombo.currentText()

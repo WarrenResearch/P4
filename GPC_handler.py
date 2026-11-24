@@ -8,6 +8,9 @@ import pickle
 import threading
 from zoneinfo import ZoneInfo
 
+# Measurement time (s) from the first injection: single injection / triple injection.
+MEAS_TIME_S = {1: 1500, 3: 700}
+
 # Uncomment line 76 when valve connected
 class GPC_handler(QObject):
     GPC_complete = pyqtSignal(dict)
@@ -116,14 +119,12 @@ class GPC_handler(QObject):
         # threading.Timer(3, self.delayed_return).start() #3s delay
 
     def GPC_inject(self):
-        if self.injnum == 3:
-            meas_time = 700 ### this will need to be changed from 700, but this hasn't been tested with longer measurement times yet, so start with this and adjust as needed
-        else:
-            meas_time = 900
+        meas_time = MEAS_TIME_S[3] if self.injnum == 3 else MEAS_TIME_S[1]
 
         if self.iter == 0:
             self.main.GPC_runner.start_time.setText(datetime.now().strftime("%H:%M:%S"))
             self.main.GPC_runner.end_time.setText((datetime.now() + timedelta(seconds=meas_time)).strftime("%H:%M:%S"))
+            # Each GPC sample is its own measurement: RI (ch1) and UV (ch2) read every ~0.2 s for meas_time.
             self.PicoGPC.measure(meas_time)
         print("Injection number", str(self.iter+1), "time=", datetime.now().strftime("%H:%M:%S"))
         # Sample valve each time inject runs

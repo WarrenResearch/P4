@@ -62,7 +62,7 @@ class PicoGPC(QObject):
             self.rollingdataReady.emit((self.timeAxis, self.channel1, self.channel2))
             
             time.sleep(0.2)
-            
+
             if self.stopRI_SignalThread:
                 break
 

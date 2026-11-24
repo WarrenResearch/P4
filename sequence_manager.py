@@ -144,32 +144,58 @@ class SequenceExecutor:
 
         self.controller._schedule_timer(
             int(wait_s * 1000),
-            lambda row=current_row, point=point_index: self._sample_current_row(row, 1, 0, None, point),
+            lambda row=current_row, point=point_index: self._start_sampling_point(row, point),
             track_sequence=True,
         )
 
     def _on_row_complete(self):
         # Start sampling sequence for current row (single pass, no reactor volume timing).
         current_row = getattr(self.controller, "_sequence_row_index", 0)
-        self._sample_current_row(current_row, 1)
+        self._start_sampling_point(current_row, None)
 
-    def _finish_sampling_point(self, current_row, point_index=None):
-        # The fraction collector plan (if used) is finished. Now run the switching valve,
-        # which goes last because its injection introduces solvent into the stream.
+    def _start_sampling_point(self, current_row, point_index=None):
+        # Order at each sampling point: switching valve first (if used), then the fraction
+        # collector plan (if used). The valve injection only waits for its own injections to
+        # be fired; the GPC measurement carries on in the background while the collector samples.
         if not self.controller.uses_switching_valve():
-            self._advance_after_sampling_point(current_row, point_index)
+            self._sample_current_row(current_row, 1, 0, None, point_index)
             return
 
         volume_tag = f"-{self._row_sampling_volumes[point_index]:g}RV" if point_index is not None else ""
         sample_id = f"Valve-row-{current_row + 1}{volume_tag}"
         started = self.controller.switching_valve_sample(
             sample_id,
-            on_complete=lambda row=current_row, point=point_index: self._advance_after_sampling_point(row, point),
+            on_complete=lambda row=current_row, point=point_index: self._hold_then_sample_fraction(row, point),
             track_sequence_timer=True,
             reactor_volumes=self._row_sampling_volumes[point_index] if point_index is not None else None,
         )
         if not started:
-            self._advance_after_sampling_point(current_row, point_index)
+            # Valve could not start: carry on with the fraction collector so the point is not lost.
+            self._sample_current_row(current_row, 1, 0, None, point_index)
+
+    def _hold_then_sample_fraction(self, current_row, point_index=None):
+        # After the valve has fired, wait for the dead-volume difference between the valve and
+        # the fraction collector to flow, then run the fraction collector plan.
+        hold_ml = self.controller.valve_to_fraction_hold_ml()
+        flow_ml_min = self.controller._get_total_current_flowrate_ml_min()
+        if hold_ml <= 0 or flow_ml_min <= 0 or not self.controller.uses_fraction_collector():
+            self._sample_current_row(current_row, 1, 0, None, point_index)
+            return
+
+        hold_s = (hold_ml / flow_ml_min) * 60.0
+        print(
+            f"[{time.strftime('%H:%M:%S')}] Valve injected: waiting {hold_s:.0f} s ({hold_ml:.3f} mL) "
+            f"before the fraction collector samples."
+        )
+        self.controller._schedule_timer(
+            int(hold_s * 1000),
+            lambda row=current_row, point=point_index: self._sample_current_row(row, 1, 0, None, point),
+            track_sequence=True,
+        )
+
+    def _finish_sampling_point(self, current_row, point_index=None):
+        # The valve (if used) and fraction collector plan (if used) are both finished.
+        self._advance_after_sampling_point(current_row, point_index)
 
     def _advance_after_sampling_point(self, current_row, point_index=None):
         # Move to the next reactor volume sampling point for this row, or advance to the next row.
